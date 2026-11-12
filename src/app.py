@@ -1,6 +1,8 @@
+import asyncio
+
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, Footer, Header, Input, Select, Static
+from textual.widgets import Button, Footer, Header, Input, ProgressBar, Select, Static
 
 from .content import SPECIALIZATIONS, SKILL_TREES
 from .game import GameSession
@@ -106,10 +108,40 @@ class AshenKingdom(App):
     }
 
     #battle-log {
-        height: 1fr;
-        border: round #594875;
-        padding: 1;
+        height: 3;
+        min-height: 3;
+        border: round #9b80d4;
+        padding: 0 1;
         margin: 1 0;
+        color: #f1eaff;
+        text-style: bold;
+    }
+
+    .health-bar {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    .health-bar Bar > .bar--bar {
+        color: green;
+        background: #541414;
+    }
+
+    .health-bar Bar > .bar--complete {
+        color: lime;
+    }
+
+    .health-bar.health-low Bar > .bar--bar {
+        color: yellow;
+    }
+
+    .health-bar.health-critical Bar > .bar--bar {
+        color: red;
+    }
+
+    #player-mana-bar Bar > .bar--bar {
+        color: cyan;
+        background: #17334a;
     }
 
     .skill-level {
@@ -162,6 +194,7 @@ class AshenKingdom(App):
 
         self.session = GameSession()
         self.battle_log = []
+        self.battle_animating = False
 
     @property
     def character(self):
@@ -356,15 +389,57 @@ class AshenKingdom(App):
         await screen.mount(
             Static("BATTLE", classes="title"),
             Static(
-                f"{self.enemy['name']}\n"
-                f"Enemy HP: {self.enemy['hp']}\n\n"
-                f"{self.character['name']}\n"
-                f"HP: {self.character['hp']}/{self.character['max_hp']}\n"
+                f"{self.enemy['name']} · HP {max(0, self.enemy['hp'])}/{self.enemy['max_hp']}"
+            ),
+            ProgressBar(
+                total=self.enemy["max_hp"],
+                show_percentage=False,
+                show_eta=False,
+                id="enemy-hp-bar",
+                classes="health-bar",
+            ),
+            Static(
+                f"{self.character['name']} · HP {self.character['hp']}/{self.character['max_hp']}"
+            ),
+            ProgressBar(
+                total=self.character["max_hp"],
+                show_percentage=False,
+                show_eta=False,
+                id="player-hp-bar",
+                classes="health-bar",
+            ),
+            Static(
                 f"Mana: {self.character['mana']}/{self.character['max_mana']}",
                 classes="info",
             ),
+            ProgressBar(
+                total=self.character["max_mana"],
+                show_percentage=False,
+                show_eta=False,
+                id="player-mana-bar",
+                classes="health-bar",
+            ),
             Static("\n".join(self.battle_log[-7:]), id="battle-log"),
             Static("Choose your spell:"),
+        )
+        enemy_bar = screen.query_one("#enemy-hp-bar", ProgressBar)
+        player_bar = screen.query_one("#player-hp-bar", ProgressBar)
+        mana_bar = screen.query_one("#player-mana-bar", ProgressBar)
+
+        self.set_health_bar_state(enemy_bar, self.enemy["hp"], self.enemy["max_hp"])
+        self.set_health_bar_state(
+            player_bar, self.character["hp"], self.character["max_hp"]
+        )
+
+        enemy_bar.update(
+            progress=max(0, self.enemy["hp"])
+        )
+        player_bar.update(
+            progress=max(0, self.character["hp"])
+        )
+
+        mana_bar.update(
+            progress=max(0, self.character["mana"])
         )
         await self.mount_interaction_buttons(
             *[
@@ -372,7 +447,8 @@ class AshenKingdom(App):
                     f"{spell['name']} ({spell['cost']} Mana)",
                     id=f"spell-{spell_id}",
                     disabled=(
-                        self.character["mana"] < spell["cost"]
+                        self.battle_animating
+                        or self.character["mana"] < spell["cost"]
                         or (
                             spell["type"] == "heal"
                             and self.character["hp"] >= self.character["max_hp"]
@@ -381,18 +457,45 @@ class AshenKingdom(App):
                 )
                 for spell_id, spell in self.session.available_spells().items()
             ],
-            Button("Retreat", id="retreat"),
+            Button("Retreat", id="retreat", disabled=self.battle_animating),
         )
 
-    async def cast_spell(self, spell_id):
-        if not self.character or not self.enemy:
-            return
-        message, finished, _reward = self.session.cast_spell(spell_id)
-        self.battle_log.extend(message.splitlines())
-        if finished:
-            self.battle_log = []
+    @staticmethod
+    def set_health_bar_state(bar: ProgressBar, hp: int, max_hp: int) -> None:
+        bar.remove_class("health-low", "health-critical")
+        ratio = hp / max_hp if max_hp else 0
+        if ratio <= 0.25:
+            bar.add_class("health-critical")
+        elif ratio <= 0.5:
+            bar.add_class("health-low")
+
+    async def show_battle_event(self, message):
+        self.battle_log = [message]
+        if self.enemy and self.character:
+            await self.show_battle()
+        else:
             await self.show_location(message)
+            await asyncio.sleep(2)
+        await asyncio.sleep(2)
+
+    async def cast_spell(self, spell_id):
+        if not self.character or not self.enemy or self.battle_animating:
             return
+        self.battle_animating = True
+        try:
+            message, finished, _reward = self.session.cast_spell_player(spell_id)
+            await self.show_battle_event(message)
+            if finished:
+                self.battle_log = []
+                return
+
+            message, finished = self.session.enemy_attack()
+            await self.show_battle_event(message)
+            if finished:
+                self.battle_log = []
+                return
+        finally:
+            self.battle_animating = False
         await self.show_battle()
 
     async def show_character(self):
@@ -558,6 +661,9 @@ class AshenKingdom(App):
         button_id = event.button.id
 
         if button_id is None:
+            return
+
+        if self.battle_animating:
             return
 
         if button_id == "create-character":

@@ -115,9 +115,10 @@ class GameSession:
         if location.name == "Eldoria Village":
             return None, "The village is peaceful. No creatures nearby."
         self.enemy = dict(self.rng.choice(MONSTERS))
+        self.enemy["max_hp"] = self.enemy["hp"]
         return self.enemy, None
 
-    def cast_spell(self, spell_id: str) -> tuple[str, bool, int | None]:
+    def cast_spell_player(self, spell_id: str) -> tuple[str, bool, int | None]:
         player, enemy = self.character, self.enemy
         spell = SPELLS.get(spell_id)
         if player is None or enemy is None or spell is None:
@@ -131,29 +132,46 @@ class GameSession:
         if spell["type"] == "heal":
             restored = min(spell["damage"], player["max_hp"] - player["hp"])
             player["hp"] += restored
-            message = f"You restored {restored} HP!"
+            message = f"{player['name']} used {spell['name']} and restored {restored} HP."
         else:
             damage = (
                 spell["damage"] + player["bonus_damage"] + player["intelligence"] // 5
             )
             enemy["hp"] -= damage
-            message = f"\n>>> {spell['name']} dealt {damage} damage!"
+            message = (
+                f"{player['name']} attacked {enemy['name']} using {spell['name']} "
+                f"and dealt {damage} damage."
+            )
             if enemy["hp"] <= 0:
                 reward = self._claim_victory()
-                return f"{message}\nVictory! You earned {reward} XP!", True, reward
+                message = f"Victory! You earned {reward} XP!"
+                return message, True, reward
 
+        return message, False, None
+
+    def enemy_attack(self) -> tuple[str, bool]:
+        player, enemy = self.character, self.enemy
+        if player is None or enemy is None:
+            return "That action is not available.", True
         enemy_damage = self.rng.randint(max(1, enemy["damage"] - 3), enemy["damage"])
         player["hp"] -= enemy_damage
-        message += f"\n{enemy['name']} dealt {enemy_damage} damage!"
+        message = f"{enemy['name']} retaliated and dealt {enemy_damage} damage."
         if player["hp"] <= 0:
             player["hp"] = 1
             self.enemy = None
             return (
-                message + "\nYou lost the encounter and retreated safely!",
+                message + " You lost the encounter and retreated safely!",
                 True,
-                None,
             )
-        return message, False, None
+        return message, False
+
+    def cast_spell(self, spell_id: str) -> tuple[str, bool, int | None]:
+        """Resolve a complete spell turn for callers that do not animate combat."""
+        message, finished, reward = self.cast_spell_player(spell_id)
+        if finished:
+            return message, True, reward
+        enemy_message, finished = self.enemy_attack()
+        return f"{message}\n{enemy_message}", finished, None
 
     def _claim_victory(self) -> int:
         assert self.enemy is not None and self.character is not None
