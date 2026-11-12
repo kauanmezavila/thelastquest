@@ -1,5 +1,6 @@
 import asyncio
 
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, Footer, Header, Input, ProgressBar, Select, Static
@@ -139,6 +140,15 @@ class AshenKingdom(App):
         color: red;
     }
 
+    .progress-bar Bar > .bar--bar {
+        color: #ffd700;
+        background: #604d11;
+    }
+
+    .progress-bar Bar > .bar--complete {
+        color: #ffe680;
+    }
+
     #player-mana-bar Bar > .bar--bar {
         color: cyan;
         background: #17334a;
@@ -163,6 +173,12 @@ class AshenKingdom(App):
         height: 1fr;
         width: 100%;
         overflow-y: auto;
+        padding-right: 1;
+    }
+
+    #map-content {
+        height: 1fr;
+        width: 100%;
         padding-right: 1;
     }
 
@@ -218,12 +234,37 @@ class AshenKingdom(App):
             yield Button("Map", id="map")
             yield Button("Character", id="character")
             yield Button("Inventory", id="inventory")
+            yield Button("Save", id="save")
             yield Button("Exit", id="exit")
 
         yield Footer()
 
     async def on_mount(self):
-        await self.show_character_creation()
+        try:
+            loaded = self.session.load_game()
+        except (OSError, ValueError, TypeError) as error:
+            self.notify(f"Save could not be loaded: {error}", title="Save error")
+            await self.show_character_creation()
+            return
+
+        if not loaded:
+            await self.show_character_creation()
+        elif self.enemy:
+            self.battle_log = [f"Battle resumed: {self.enemy['name']} is still here."]
+            await self.show_battle()
+        else:
+            await self.show_location("Save loaded.")
+
+    async def save_game(self):
+        if not self.character:
+            self.notify("Create a character before saving.", title="Save")
+            return
+        try:
+            self.session.save_game()
+        except OSError as error:
+            self.notify(f"Could not save the game: {error}", title="Save error")
+            return
+        self.notify("Game saved.", title="The Last Quest", timeout=2)
 
     async def clear_screen(self):
 
@@ -327,19 +368,85 @@ class AshenKingdom(App):
             return
 
         screen = await self.clear_screen()
+        location_message = message or "What would you like to do?"
+        if message and "Victory!" in message:
+            location_message = Text(message)
+            victory_start = message.index("Victory!")
+            location_message.stylize("bold yellow", victory_start, len(message))
 
         await screen.mount(
             Static(f"LOCATION: {location.name.upper()}", classes="title"),
             Static(location.description, classes="subtitle"),
             Static(
-                f"Wizard: {self.character['name']}\n"
-                f"HP: {self.character['hp']}/{self.character['max_hp']}\n"
-                f"Mana: {self.character['mana']}/{self.character['max_mana']}\n"
-                f"Level: {self.character['level']}",
+                f"Wizard: {self.character['name']}\n",
                 classes="info",
             ),
-            Static(message or "What would you like to do?", id="location-message"),
+            Static(
+                f"Level: {self.character['level']}/{self.character['max_level']}",
+            ),
+            ProgressBar(
+                total=self.character["max_level"],
+                show_percentage=False,
+                show_eta=False,
+                id="player-level-bar",
+                classes="progress-bar",
+            ),
+            Static(
+                "XP: MAX" if self.character["level"] >= self.character["max_level"]
+                else f"XP: {self.character['xp']}/{self.character['xp_next']}"
+            ),
+            ProgressBar(
+                total=max(1, self.character["xp_next"]),
+                show_percentage=False,
+                show_eta=False,
+                id="player-xp-bar",
+                classes="progress-bar",
+            ),
+            Static(
+                f"HP: {self.character['hp']}/{self.character['max_hp']}\n"
+            ),
+            ProgressBar(
+                total=self.character["max_hp"],
+                show_percentage=False,
+                show_eta=False,
+                id="player-hp-bar",
+                classes="health-bar",
+            ),
+            Static(
+                f"Mana: {self.character['mana']}/{self.character['max_mana']}\n"
+            ),
+            ProgressBar(
+                total=self.character["max_mana"],
+                show_percentage=False,
+                show_eta=False,
+                id="player-mana-bar",
+                classes="health-bar",
+            ),
+            Static(location_message, id="location-message"),
         )
+
+        player_bar = screen.query_one("#player-hp-bar", ProgressBar)
+        mana_bar = screen.query_one("#player-mana-bar", ProgressBar)
+        level_bar = screen.query_one("#player-level-bar", ProgressBar)
+        xp_bar = screen.query_one("#player-xp-bar", ProgressBar)
+
+        self.set_health_bar_state(
+            player_bar, self.character["hp"], self.character["max_hp"]
+        )
+
+        player_bar.update(
+            progress=max(0, self.character["hp"])
+        )
+
+        self.set_health_bar_state(
+            mana_bar, self.character["mana"], self.character["max_mana"]
+        )
+
+        mana_bar.update(
+            progress=max(0, self.character["mana"])
+        )
+        level_bar.update(progress=self.character["level"])
+        xp_bar.update(progress=self.character["xp"])
 
         await self.mount_interaction_buttons(
             Button("Search for creatures", id="search")
@@ -516,12 +623,10 @@ class AshenKingdom(App):
                 Static(
                     f"Name: {p['name']}\n"
                     f"Specialization: {SPECIALIZATIONS[p['class']]['name']}\n"
-                    f"Level: {p['level']}\n\n"
                     f"HP: {p['hp']}/{p['max_hp']}\n"
                     f"Mana: {p['mana']}/{p['max_mana']}\n\n"
                     f"Intelligence: {p['intelligence']}\n"
                     f"Magic Bonus: +{p['bonus_damage']}\n\n"
-                    f"XP: {p['xp']}/{p['xp_next']}\n\n"
                     f"Skill points: {p['skill_points']}\n"
                     f"Learned skills: {len(p['skills'])}\n\n"
                     f"{SPECIALIZATIONS[p['class']]['description']}",
@@ -531,6 +636,34 @@ class AshenKingdom(App):
                 Static(ascii_character, id="character-art"),
                 id="character-sheet",
             ),
+        )
+        await screen.mount(
+            Static(f"Level: {p['level']}/{p['max_level']}"),
+            ProgressBar(
+                total=p["max_level"],
+                show_percentage=False,
+                show_eta=False,
+                id="character-level-bar",
+                classes="progress-bar",
+            ),
+            Static(
+                "XP: MAX"
+                if p["level"] >= p["max_level"]
+                else f"XP: {p['xp']}/{p['xp_next']}"
+            ),
+            ProgressBar(
+                total=max(1, p["xp_next"]),
+                show_percentage=False,
+                show_eta=False,
+                id="character-xp-bar",
+                classes="progress-bar",
+            ),
+        )
+        screen.query_one("#character-level-bar", ProgressBar).update(
+            progress=p["level"]
+        )
+        screen.query_one("#character-xp-bar", ProgressBar).update(
+            progress=p["xp"]
         )
         await self.mount_interaction_buttons(
             Button("Skill tree", id="skill-tree"),
@@ -638,10 +771,83 @@ class AshenKingdom(App):
 
         await screen.mount(
             Static("ELDORIA WORLD MAP", classes="title"),
-            Static(
-                f"Current location: {current.name}\n\n" f"Connected locations:",
-                classes="info",
-            ),
+            VerticalScroll(id="map-content"),
+        )
+
+        regions = list(self.session.locations_by_name.values())
+        node_width = max(24, max(len(region.name) + 4 for region in regions))
+        map_lines = [
+            "● = player   ○ = region   → / ← = passable route   × = no direct route",
+            "",
+        ]
+
+        for index, left in enumerate(regions):
+            for right in regions[index + 1 :]:
+                left_to_right = next(
+                    (
+                        direction
+                        for direction, destination_id in left.connections.items()
+                        if destination_id == right.id
+                    ),
+                    None,
+                )
+                right_to_left = next(
+                    (
+                        direction
+                        for direction, destination_id in right.connections.items()
+                        if destination_id == left.id
+                    ),
+                    None,
+                )
+                route_labels = [
+                    f"── {left_to_right} →" if left_to_right else "× no path",
+                    f"← {right_to_left} ──" if right_to_left else "× no path",
+                ]
+                connector_width = max(18, *(len(label) for label in route_labels))
+
+                def box_line(text):
+                    return f"│ {text:<{node_width - 2}} │"
+
+                left_marker = "●" if left.id == current.id else "○"
+                right_marker = "●" if right.id == current.id else "○"
+                left_top = "┌" + "─" * node_width + "┐"
+                right_top = left_top
+                map_lines.extend(
+                    [
+                        left_top + " " * (connector_width + 2) + right_top,
+                        box_line(f"{left_marker} {left.name}")
+                        + " "
+                        + route_labels[0].ljust(connector_width)
+                        + " "
+                        + box_line(f"{right_marker} {right.name}"),
+                        box_line(f"Area: {left.width} x {left.height}")
+                        + " "
+                        + route_labels[1].ljust(connector_width)
+                        + " "
+                        + box_line(f"Area: {right.width} x {right.height}"),
+                        "└" + "─" * node_width + "┘"
+                        + " " * (connector_width + 2)
+                        + "└" + "─" * node_width + "┘",
+                        "",
+                    ]
+                )
+
+        map_lines.extend(["REGIONS", ""])
+        for region in regions:
+            marker = "●" if region.id == current.id else "○"
+            map_lines.extend(
+                [
+                    f"{marker} {region.name}",
+                    f"  {region.description}",
+                    "",
+                ]
+            )
+
+        if len(regions) < 2:
+            map_lines.append("Add another region to display connections.")
+
+        await screen.query_one("#map-content", VerticalScroll).mount(
+            Static("\n".join(map_lines), classes="info")
         )
 
         for direction, destination_id in current.connections.items():
@@ -697,6 +903,10 @@ class AshenKingdom(App):
         elif button_id == "inventory":
 
             await self.show_inventory()
+
+        elif button_id == "save":
+
+            await self.save_game()
 
         elif button_id == "back":
 

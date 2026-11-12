@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import random
+import json
+from pathlib import Path
 from typing import Any
 
 from barebones_rpg import Game, GameConfig, Location, World
@@ -11,9 +13,12 @@ from .content import MONSTERS, SPECIALIZATIONS, SPELLS, SKILL_TREES
 
 class GameSession:
 
-    def __init__(self, *, rng: Any = random):
+    def __init__(self, *, rng: Any = random, save_path: Path | None = None):
         self.engine = Game(
             GameConfig(title="The Last Quest", save_directory="saves", auto_save=True)
+        )
+        self.save_path = save_path or (
+            Path(__file__).resolve().parent.parent / "saves" / "the_last_quest.json"
         )
         self.world = self._build_world()
         self.inventory = Inventory(max_slots=20)
@@ -21,8 +26,7 @@ class GameSession:
         self.enemy: dict[str, Any] | None = None
         self.rng = rng
 
-    @staticmethod
-    def _build_world() -> World:
+    def _build_world(self) -> World:
         world = World(name="Eldoria")
         village = Location(
             name="Eldoria Village",
@@ -36,11 +40,41 @@ class GameSession:
             width=30,
             height=30,
         )
+        self.locations_by_name = {village.name: village, forest.name: forest}
         world.add_location(village)
         world.add_location(forest)
         world.connect_locations(village.id, "north", forest.id, bidirectional=True)
         world.set_current_location(village.id)
         return world
+
+    def save_game(self) -> None:
+        location = self.current_location
+        data = {
+            "character": self.character,
+            "location": location.name if location else None,
+            "enemy": self.enemy,
+        }
+        self.save_path.parent.mkdir(parents=True, exist_ok=True)
+        self.save_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    def load_game(self) -> bool:
+        if not self.save_path.exists():
+            return False
+
+        data = json.loads(self.save_path.read_text(encoding="utf-8"))
+        character = data.get("character")
+        location_name = data.get("location")
+        if not isinstance(character, dict) or character.get("class") not in SPECIALIZATIONS:
+            raise ValueError("The save file has invalid character data.")
+        if location_name not in self.locations_by_name:
+            raise ValueError("The save file has an unknown location.")
+
+        self.character = character
+        self.enemy = data.get("enemy")
+        self.world.set_current_location(self.locations_by_name[location_name].id)
+        return True
 
     @property
     def current_location(self):
@@ -55,6 +89,7 @@ class GameSession:
             "name": name,
             "class": specialization,
             "level": 1,
+            "max_level": 10,
             "xp": 0,
             "xp_next": 100,
             "skill_points": 0,
@@ -135,7 +170,7 @@ class GameSession:
             message = f"{player['name']} used {spell['name']} and restored {restored} HP."
         else:
             damage = (
-                spell["damage"] + player["bonus_damage"] + player["intelligence"] // 5
+                spell["damage"] + player["bonus_damage"] + player["intelligence"] // 5 * player["level"] // 10
             )
             enemy["hp"] -= damage
             message = (
@@ -166,7 +201,6 @@ class GameSession:
         return message, False
 
     def cast_spell(self, spell_id: str) -> tuple[str, bool, int | None]:
-        """Resolve a complete spell turn for callers that do not animate combat."""
         message, finished, reward = self.cast_spell_player(spell_id)
         if finished:
             return message, True, reward
@@ -177,9 +211,13 @@ class GameSession:
         assert self.enemy is not None and self.character is not None
         reward = self.enemy["xp"]
         player = self.character
-        player["xp"] += reward
+        if player["level"] < player["max_level"]:
+            player["xp"] += reward
         self.enemy = None
-        while player["xp"] >= player["xp_next"]:
+        while (
+            player["xp"] >= player["xp_next"]
+            and player["level"] < player["max_level"]
+        ):
             player["xp"] -= player["xp_next"]
             player["level"] += 1
             player["skill_points"] += 1
@@ -189,6 +227,8 @@ class GameSession:
             player["hp"] = player["max_hp"]
             player["mana"] = player["max_mana"]
             player["intelligence"] += 2
+        if player["level"] >= player["max_level"]:
+            player["xp"] = player["xp_next"] = 1
         return reward
 
     def retreat(self) -> None:
