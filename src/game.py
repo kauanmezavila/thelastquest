@@ -8,7 +8,14 @@ from typing import Any
 from barebones_rpg import Game, GameConfig, Location, World
 from barebones_rpg.items import Inventory
 
-from .content import MONSTERS, SPECIALIZATIONS, SPELLS, SKILL_TREES
+from .content import (
+    LOCATIONS,
+    MONSTERS,
+    SKILL_TREES,
+    SPECIALIZATIONS,
+    SPELLS,
+    STARTING_LOCATION,
+)
 
 
 class GameSession:
@@ -28,23 +35,41 @@ class GameSession:
 
     def _build_world(self) -> World:
         world = World(name="Eldoria")
-        village = Location(
-            name="Eldoria Village",
-            description="A peaceful village surrounded by ancient hills.",
-            width=20,
-            height=20,
-        )
-        forest = Location(
-            name="Gray Forest",
-            description="An ancient forest filled with mysterious creatures.",
-            width=30,
-            height=30,
-        )
-        self.locations_by_name = {village.name: village, forest.name: forest}
-        world.add_location(village)
-        world.add_location(forest)
-        world.connect_locations(village.id, "north", forest.id, bidirectional=True)
-        world.set_current_location(village.id)
+        locations_by_id = {}
+        for location_key, details in LOCATIONS.items():
+            location = Location(
+                name=details["name"],
+                description=details["description"],
+                width=details["width"],
+                height=details["height"],
+            )
+            locations_by_id[location_key] = location
+            world.add_location(location)
+
+        self.locations_by_name = {
+            location.name: location for location in locations_by_id.values()
+        }
+        self.location_keys_by_id = {
+            location.id: location_key
+            for location_key, location in locations_by_id.items()
+        }
+        for location_key, details in LOCATIONS.items():
+            source = locations_by_id[location_key]
+            for direction, destination_key in details.get("connections", {}).items():
+                if destination_key not in locations_by_id:
+                    raise ValueError(
+                        f"Unknown destination '{destination_key}' from '{location_key}'."
+                    )
+                world.connect_locations(
+                    source.id,
+                    direction,
+                    locations_by_id[destination_key].id,
+                    bidirectional=False,
+                )
+
+        if STARTING_LOCATION not in locations_by_id:
+            raise ValueError(f"Unknown starting location '{STARTING_LOCATION}'.")
+        world.set_current_location(locations_by_id[STARTING_LOCATION].id)
         return world
 
     def save_game(self) -> None:
@@ -147,8 +172,9 @@ class GameSession:
         location = self.current_location
         if location is None:
             return None, "There is nowhere to explore."
-        if location.name == "Eldoria Village":
-            return None, "The village is peaceful. No creatures nearby."
+        location_key = self.location_keys_by_id.get(location.id)
+        if location_key and not LOCATIONS[location_key].get("encounters", True):
+            return None, "This region is peaceful. No creatures nearby."
         self.enemy = dict(self.rng.choice(MONSTERS))
         self.enemy["max_hp"] = self.enemy["hp"]
         return self.enemy, None

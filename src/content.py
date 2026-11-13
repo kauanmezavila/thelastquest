@@ -1,3 +1,32 @@
+STARTING_LOCATION = "eldoria_village"
+
+LOCATIONS = {
+    "eldoria_village": {
+        "name": "Eldoria Village",
+        "description": "A peaceful village surrounded by ancient hills. No creatures are present here, but the villagers are wary of the dark forces that lurk beyond the hills.",
+        "width": 20,
+        "height": 20,
+        "encounters": False,
+        "connections": {"north": "gray_forest"},
+    },
+    "bastion": {
+        "name": "The Bastion",
+        "description": "An new fortress built to protect the realm from dark forces. The walls are high and the guards are vigilant, but rumors of a hidden threat persist.",
+        "width": 30,
+        "height": 30,
+        "encounters": True,
+        "connections": {"north": "eldoria_village"},
+    },
+    "gray_forest": {
+        "name": "Gray Forest",
+        "description": "An ancient forest filled with mysterious creatures. The trees are tall and the canopy is thick, allowing only a few rays of sunlight to reach the forest floor.",
+        "width": 50,
+        "height": 50,
+        "encounters": True,
+        "connections": {"south": "eldoria_village"},
+    },
+}
+
 SPECIALIZATIONS = {
     "pyromancer": {
         "name": "Pyromancer",
