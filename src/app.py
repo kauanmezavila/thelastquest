@@ -5,7 +5,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, Footer, Header, Input, ProgressBar, Select, Static
 
-from .content import SPECIALIZATIONS, SKILL_TREES
+from .content import SPECIALIZATIONS, SKILL_TREES, STARTING_LOCATION
 from .game import GameSession
 
 
@@ -51,6 +51,20 @@ class AshenKingdom(App):
         width: 1fr;
         min-width: 10;
         margin: 0 1;
+    }
+
+    #interaction-actions.battle-actions {
+        height: auto;
+        layout: grid;
+        grid-size: 4;
+        grid-columns: 1fr 1fr 1fr 1fr;
+        grid-gutter: 0 1;
+    }
+
+    #interaction-actions.battle-actions Button {
+        width: 1fr;
+        min-width: 0;
+        margin: 0;
     }
 
     .title {
@@ -145,6 +159,57 @@ class AshenKingdom(App):
         height: 1fr;
         width: 100%;
         padding-right: 1;
+    }
+
+    #map-content {
+        height: 1fr;
+        width: 100%;
+        padding: 0 1;
+    }
+
+    #map-network {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+
+    .map-row {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+
+    .map-slot {
+        width: 1fr;
+        height: 1;
+    }
+
+    .map-region-card {
+        width: 1fr;
+        min-height: 8;
+        height: auto;
+        margin: 1;
+        padding: 1;
+        border: round #594875;
+        background: #19171f;
+        color: #d6d6e0;
+        text-align: center;
+        content-align: center middle;
+    }
+
+    .map-region-current {
+        border: round #6b9b73;
+        background: #15231b;
+        color: #d9f2dc;
+        text-style: bold;
+    }
+
+    .map-routes {
+        width: 1fr;
+        height: auto;
+        margin: 0 1 1 1;
+        color: #c4a7ff;
+        text-align: center;
     }
 
     #location-dashboard {
@@ -301,12 +366,25 @@ class AshenKingdom(App):
     .map-region-card {
         width: 1fr;
         height: auto;
-        min-height: 8;
+        min-height: 7;
         border: round #594875;
         background: #19171f;
         color: #ded8ed;
         padding: 1;
         margin: 0 1 1 0;
+        text-align: left;
+    }
+
+    .map-region-card:disabled {
+        color: #8c8794;
+        background: #17161b;
+        border: round #393540;
+    }
+
+    .map-region-card.map-region-current {
+        border: round #d6ad44;
+        background: #2b2412;
+        color: #fff0b3;
     }
 
     .map-region-current {
@@ -562,8 +640,11 @@ class AshenKingdom(App):
                 classes="progress-bar",
             ),
             Static(
-                "XP: MAX" if self.character["level"] >= self.character["max_level"]
-                else f"XP: {self.character['xp']}/{self.character['xp_next']}",
+                (
+                    "XP: MAX"
+                    if self.character["level"] >= self.character["max_level"]
+                    else f"XP: {self.character['xp']}/{self.character['xp_next']}"
+                ),
                 classes="character-stat-label",
             ),
             ProgressBar(
@@ -598,8 +679,7 @@ class AshenKingdom(App):
             Static("AVAILABLE ROUTES", classes="location-section"),
             Static(
                 "\n".join(
-                    f"→ {direction.title()} - "
-                    f"{destination.name}"
+                    f"→ {direction.title()} - " f"{destination.name}"
                     for direction, destination_id in location.connections.items()
                     if (destination := self.session.world.get_location(destination_id))
                     is not None
@@ -619,18 +699,14 @@ class AshenKingdom(App):
             player_bar, self.character["hp"], self.character["max_hp"]
         )
 
-        player_bar.update(
-            progress=max(0, self.character["hp"])
-        )
+        player_bar.update(progress=max(0, self.character["hp"]))
 
-        mana_bar.update(
-            progress=max(0, self.character["mana"])
-        )
+        mana_bar.update(progress=max(0, self.character["mana"]))
         level_bar.update(progress=self.character["level"])
         xp_bar.update(progress=self.character["xp"])
 
         await self.mount_interaction_buttons(
-            Button("⚔  Search for creatures", id="search")
+            Button("Search for creatures", id="search")
         )
 
         for direction, destination_id in location.connections.items():
@@ -663,7 +739,10 @@ class AshenKingdom(App):
             await self.show_location(message)
             return
 
-        self.battle_log = [f"A {enemy['name']} appeared!", "Prepare yourself!"]
+        self.battle_log = [
+            f"A level {enemy['level']} {enemy['name']} appeared!",
+            "Prepare yourself!",
+        ]
 
         await self.show_battle()
 
@@ -673,11 +752,13 @@ class AshenKingdom(App):
             return
 
         screen = await self.clear_screen()
+        screen.query_one("#interaction-actions", Horizontal).add_class("battle-actions")
 
         await screen.mount(
             Static("BATTLE", classes="title"),
             Static(
-                f"{self.enemy['name']} - HP {max(0, self.enemy['hp'])}/{self.enemy['max_hp']}"
+                f"Level {self.enemy['level']} {self.enemy['name']} - "
+                f"HP {max(0, self.enemy['hp'])}/{self.enemy['max_hp']}"
             ),
             ProgressBar(
                 total=self.enemy["max_hp"],
@@ -719,16 +800,10 @@ class AshenKingdom(App):
             player_bar, self.character["hp"], self.character["max_hp"]
         )
 
-        enemy_bar.update(
-            progress=max(0, self.enemy["hp"])
-        )
-        player_bar.update(
-            progress=max(0, self.character["hp"])
-        )
+        enemy_bar.update(progress=max(0, self.enemy["hp"]))
+        player_bar.update(progress=max(0, self.character["hp"]))
 
-        mana_bar.update(
-            progress=max(0, self.character["mana"])
-        )
+        mana_bar.update(progress=max(0, self.character["mana"]))
         await self.mount_interaction_buttons(
             *[
                 Button(
@@ -808,7 +883,9 @@ class AshenKingdom(App):
                 classes="character-hero",
             ),
             Static("VITALS", classes="character-section"),
-            Static(f"Health  -  {p['hp']}/{p['max_hp']}", classes="character-stat-label"),
+            Static(
+                f"Health  -  {p['hp']}/{p['max_hp']}", classes="character-stat-label"
+            ),
             ProgressBar(
                 total=p["max_hp"],
                 show_percentage=False,
@@ -816,7 +893,9 @@ class AshenKingdom(App):
                 id="character-hp-bar",
                 classes="health-bar",
             ),
-            Static(f"Mana  -  {p['mana']}/{p['max_mana']}", classes="character-stat-label"),
+            Static(
+                f"Mana  -  {p['mana']}/{p['max_mana']}", classes="character-stat-label"
+            ),
             ProgressBar(
                 total=p["max_mana"],
                 show_percentage=False,
@@ -837,9 +916,11 @@ class AshenKingdom(App):
                 classes="progress-bar",
             ),
             Static(
-                "XP  -  MAX"
-                if p["level"] >= p["max_level"]
-                else f"XP  -  {p['xp']}/{p['xp_next']}",
+                (
+                    "XP  -  MAX"
+                    if p["level"] >= p["max_level"]
+                    else f"XP  -  {p['xp']}/{p['xp_next']}"
+                ),
                 classes="character-stat-label",
             ),
             ProgressBar(
@@ -851,10 +932,18 @@ class AshenKingdom(App):
             ),
             Static("ATTRIBUTES", classes="character-section"),
             Horizontal(
-                Static(f"INTELLIGENCE\n{p['intelligence']}", classes="character-stat-card"),
-                Static(f"MAGIC BONUS\n+{p['bonus_damage']}", classes="character-stat-card"),
-                Static(f"SKILL POINTS\n{p['skill_points']}", classes="character-stat-card"),
-                Static(f"SKILLS LEARNED\n{len(p['skills'])}", classes="character-stat-card"),
+                Static(
+                    f"INTELLIGENCE\n{p['intelligence']}", classes="character-stat-card"
+                ),
+                Static(
+                    f"MAGIC BONUS\n+{p['bonus_damage']}", classes="character-stat-card"
+                ),
+                Static(
+                    f"SKILL POINTS\n{p['skill_points']}", classes="character-stat-card"
+                ),
+                Static(
+                    f"SKILLS LEARNED\n{len(p['skills'])}", classes="character-stat-card"
+                ),
                 id="character-stat-cards",
             ),
         )
@@ -866,9 +955,7 @@ class AshenKingdom(App):
         content.query_one("#character-level-bar", ProgressBar).update(
             progress=p["level"]
         )
-        content.query_one("#character-xp-bar", ProgressBar).update(
-            progress=p["xp"]
-        )
+        content.query_one("#character-xp-bar", ProgressBar).update(progress=p["xp"])
         await self.mount_interaction_buttons(
             Button("Skill tree", id="skill-tree"),
             Button("Back", id="back"),
@@ -928,7 +1015,11 @@ class AshenKingdom(App):
                 f"{'[x]' if learned else '[ ]'} {node['name']}  -  {status}\n"
                 f"{node['description']}\nRequires: {required}",
                 can_learn,
-                "skill-learned" if learned else ("skill-available" if can_learn else ""),
+                (
+                    "skill-learned"
+                    if learned
+                    else ("skill-available" if can_learn else "")
+                ),
             )
 
         for level in sorted(skills_by_level):
@@ -970,7 +1061,10 @@ class AshenKingdom(App):
                 Static("ELDORIA WORLD MAP", classes="title"),
                 Static("No current location is set.", classes="info"),
             )
-            await self.mount_interaction_buttons(Button("Back", id="back"))
+            await self.mount_interaction_buttons(
+                Button("Return to Eldoria", id="map-return-eldoria"),
+                Button("Back", id="back"),
+            )
             return
 
         await screen.mount(
@@ -978,96 +1072,112 @@ class AshenKingdom(App):
             VerticalScroll(id="map-content"),
         )
 
-        regions = list(self.session.locations_by_name.values())
         map_content = screen.query_one("#map-content", VerticalScroll)
         await map_content.mount(
             Static(
-                "[x] YOU ARE HERE     Green = passable     Red = no direct path",
+                "The Ancient Fields",
                 classes="map-legend",
             )
         )
+        regions = list(self.session.locations_by_name.values())
+        regions_by_key = {
+            self.session.location_keys_by_id[region.id]: region for region in regions
+        }
 
-        for index, left in enumerate(regions):
-            for right in regions[index + 1 :]:
-                left_to_right = next(
-                    (
-                        direction
-                        for direction, destination_id in left.connections.items()
-                        if destination_id == right.id
+        # Lay out a breadth-first tree from Eldoria. Treat routes as links for
+        # layout, even when travel itself is one-way, so every region appears.
+        root_key = (
+            STARTING_LOCATION
+            if STARTING_LOCATION in regions_by_key
+            else next(iter(regions_by_key))
+        )
+        adjacency = {key: [] for key in regions_by_key}
+        for key, region in regions_by_key.items():
+            for destination_id in region.connections.values():
+                destination = self.session.world.get_location(destination_id)
+                if destination is None:
+                    continue
+                destination_key = self.session.location_keys_by_id[destination.id]
+                if (
+                    destination_key in adjacency
+                    and destination_key not in adjacency[key]
+                ):
+                    adjacency[key].append(destination_key)
+                if (
+                    destination_key in adjacency
+                    and key not in adjacency[destination_key]
+                ):
+                    adjacency[destination_key].append(key)
+
+        levels = [[root_key]]
+        visited = {root_key}
+        while len(visited) < len(regions_by_key):
+            next_level = []
+            for key in levels[-1]:
+                for neighbor in adjacency[key]:
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        next_level.append(neighbor)
+            if not next_level:
+                next_level = [key for key in regions_by_key if key not in visited]
+                visited.update(next_level)
+            levels.append(next_level)
+
+        positions = {root_key: (0, 0)}
+        for depth, level in enumerate(levels[1:], start=1):
+            # Alternate branches above and below Eldoria to keep the hub near
+            # the middle as the world grows.
+            row = (depth + 1) // 2 * (-1 if depth % 2 else 1)
+            for index, key in enumerate(level):
+                col = index * 2 - (len(level) - 1)
+                positions[key] = (row, col)
+
+        min_row = min(row for row, _ in positions.values())
+        max_row = max(row for row, _ in positions.values())
+        min_col = min(col for _, col in positions.values())
+        max_col = max(col for _, col in positions.values())
+        by_position = {
+            (row - min_row, col - min_col): regions_by_key[key]
+            for key, (row, col) in positions.items()
+        }
+        network = Vertical(id="map-network")
+        await map_content.mount(network)
+        for row_index in range(max_row - min_row + 1):
+            row = Horizontal(classes="map-row")
+            await network.mount(row)
+            for col_index in range(max_col - min_col + 1):
+                region = by_position.get((row_index, col_index))
+                if region is None:
+                    await row.mount(Static("", classes="map-slot"))
+                    continue
+                key = self.session.location_keys_by_id[region.id]
+                is_current = region.id == current.id
+                card = Button(
+                    f"{'[x] YOU ARE HERE -' if is_current else '[ ] '}{region.name}\n"
+                    f"Dimensions {region.width} × {region.height}m\n{region.description}",
+                    id=f"map-go-{key}",
+                    classes=(
+                        "map-region-card map-region-current"
+                        if is_current
+                        else "map-region-card"
                     ),
-                    None,
+                    disabled=is_current,
                 )
-                right_to_left = next(
-                    (
-                        direction
-                        for direction, destination_id in right.connections.items()
-                        if destination_id == left.id
-                    ),
-                    None,
-                )
-                if left_to_right or right_to_left:
-                    route_lines = []
-                    if left_to_right:
-                        route_lines.append(f"< {left_to_right.upper()} <")
-                    if right_to_left:
-                        route_lines.append(f"> {right_to_left.upper()} >")
-                    route_text = "\n".join(route_lines)
-                    route_class = "map-route"
-                else:
-                    route_text = "x\nNO DIRECT\nPATH"
-                    route_class = "map-route map-route-blocked"
-
-                left_marker = "[x] YOU ARE HERE\n" if left.id == current.id else "[ ] REGION\n"
-                right_marker = "[x] YOU ARE HERE\n" if right.id == current.id else "[ ] REGION\n"
-                await map_content.mount(
-                    Horizontal(
-                        Static(
-                            f"{left_marker}{left.name}\n"
-                            f"AREA  {left.width} x {left.height}\n\n"
-                            f"{left.description}",
-                            classes=(
-                                "map-region-card map-region-current"
-                                if left.id == current.id
-                                else "map-region-card"
-                            ),
-                        ),
-                        Static(route_text, classes=route_class),
-                        Static(
-                            f"{right_marker}{right.name}\n"
-                            f"AREA  {right.width} × {right.height}\n\n"
-                            f"{right.description}",
-                            classes=(
-                                "map-region-card map-region-current"
-                                if right.id == current.id
-                                else "map-region-card"
-                            ),
-                        ),
-                        classes="map-row",
-                    )
+                route_parts = []
+                for direction, destination_id in region.connections.items():
+                    destination = self.session.world.get_location(destination_id)
+                    if destination is None:
+                        continue
+                    route_parts.append(f"{direction.upper()} > {destination.name}")
+                route_text = "  ·  ".join(route_parts) or "No routes"
+                await row.mount(
+                    Vertical(card, Static(route_text, classes="map-routes"))
                 )
 
-        if len(regions) == 1:
-            region = regions[0]
-            await map_content.mount(
-                Static(
-                    f"[x] YOU ARE HERE\n{region.name}\n"
-                    f"AREA  {region.width} x {region.height}\n\n"
-                    f"{region.description}\n\nNo other regions are connected yet.",
-                    classes="map-region-card map-region-current",
-                )
-            )
-
-        for direction, destination_id in current.connections.items():
-
-            destination = self.session.world.get_location(destination_id)
-            if destination is None:
-                continue
-
-            await self.mount_interaction_buttons(
-                Button(f"{destination.name} ({direction})", id=f"travel-{direction}")
-            )
-
-        await self.mount_interaction_buttons(Button("Back", id="back"))
+        await self.mount_interaction_buttons(
+            Button("Return to Eldoria", id="map-return-eldoria"),
+            Button("Back", id="back"),
+        )
 
     async def on_button_pressed(self, event: Button.Pressed):
 
@@ -1119,6 +1229,20 @@ class AshenKingdom(App):
 
             await self.show_location()
 
+        elif button_id == "map-return-eldoria":
+            target = next(
+                (
+                    location
+                    for location in self.session.locations_by_name.values()
+                    if self.session.location_keys_by_id[location.id]
+                    == STARTING_LOCATION
+                ),
+                None,
+            )
+            if target is not None:
+                self.session.world.set_current_location(target.id)
+                await self.show_location("You returned to Eldoria.")
+
         elif button_id == "retreat":
 
             self.session.retreat()
@@ -1129,6 +1253,20 @@ class AshenKingdom(App):
             direction = button_id.split("-", 1)[1]
 
             await self.travel(direction)
+
+        elif button_id.startswith("map-go-"):
+            location_key = button_id.removeprefix("map-go-")
+            target = next(
+                (
+                    location
+                    for location in self.session.locations_by_name.values()
+                    if self.session.location_keys_by_id[location.id] == location_key
+                ),
+                None,
+            )
+            if target:
+                self.session.world.set_current_location(target.id)
+                await self.show_location("You traveled to a new location.")
 
         elif button_id.startswith("spell-"):
 

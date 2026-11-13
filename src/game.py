@@ -12,6 +12,7 @@ from .content import (
     LOCATIONS,
     MONSTERS,
     SKILL_TREES,
+    STARTING_SKILLS,
     SPECIALIZATIONS,
     SPELLS,
     STARTING_LOCATION,
@@ -91,7 +92,10 @@ class GameSession:
         data = json.loads(self.save_path.read_text(encoding="utf-8"))
         character = data.get("character")
         location_name = data.get("location")
-        if not isinstance(character, dict) or character.get("class") not in SPECIALIZATIONS:
+        if (
+            not isinstance(character, dict)
+            or character.get("class") not in SPECIALIZATIONS
+        ):
             raise ValueError("The save file has invalid character data.")
         if location_name not in self.locations_by_name:
             raise ValueError("The save file has an unknown location.")
@@ -118,7 +122,7 @@ class GameSession:
             "xp": 0,
             "xp_next": 100,
             "skill_points": 0,
-            "skills": [next(iter(SKILL_TREES[specialization]))],
+            "skills": STARTING_SKILLS[specialization].copy(),
             "hp": stats["hp"],
             "max_hp": stats["hp"],
             "mana": stats["mana"],
@@ -169,13 +173,23 @@ class GameSession:
         return True
 
     def search(self) -> tuple[dict[str, Any] | None, str | None]:
+        if self.character is None:
+            return None, "Create a character before exploring."
         location = self.current_location
         if location is None:
             return None, "There is nowhere to explore."
         location_key = self.location_keys_by_id.get(location.id)
         if location_key and not LOCATIONS[location_key].get("encounters", True):
             return None, "This region is peaceful. No creatures nearby."
-        self.enemy = dict(self.rng.choice(MONSTERS))
+        player_level = self.character["level"]
+        # Keep encounters close to the player's level, allowing a small chance
+        # of finding a stronger creature without exposing endgame monsters early.
+        suitable_monsters = [
+            monster
+            for monster in MONSTERS
+            if max(1, player_level - 1) <= monster["level"] <= player_level + 1
+        ]
+        self.enemy = dict(self.rng.choice(suitable_monsters))
         self.enemy["max_hp"] = self.enemy["hp"]
         return self.enemy, None
 
@@ -193,10 +207,20 @@ class GameSession:
         if spell["type"] == "heal":
             restored = min(spell["damage"], player["max_hp"] - player["hp"])
             player["hp"] += restored
-            message = f"{player['name']} used {spell['name']} and restored {restored} HP."
+            message = (
+                f"{player['name']} used {spell['name']} and restored {restored} HP."
+            )
+        elif spell["type"] == "mana":
+            restored = min(spell["damage"], player["max_mana"] - player["mana"])
+            player["mana"] += restored * player["intelligence"] // 10
+            message = (
+                f"{player['name']} used {spell['name']} and restored {restored} Mana"
+            )
         else:
             damage = (
-                spell["damage"] + player["bonus_damage"] + player["intelligence"] // 5 * player["level"] // 10
+                spell["damage"]
+                + player["bonus_damage"]
+                + player["intelligence"] // 5 * player["level"] // 10
             )
             enemy["hp"] -= damage
             message = (
@@ -241,8 +265,7 @@ class GameSession:
             player["xp"] += reward
         self.enemy = None
         while (
-            player["xp"] >= player["xp_next"]
-            and player["level"] < player["max_level"]
+            player["xp"] >= player["xp_next"] and player["level"] < player["max_level"]
         ):
             player["xp"] -= player["xp_next"]
             player["level"] += 1
