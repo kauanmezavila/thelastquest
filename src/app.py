@@ -8,6 +8,7 @@ from textual.widgets import Button, Footer, Header, Input, ProgressBar, Select, 
 from .content import (
     DIALOGUES,
     DIALOGUE_UI,
+    ITEMS,
     QUESTS,
     QUEST_UI,
     SPECIALIZATIONS,
@@ -505,6 +506,56 @@ class AshenKingdom(App):
         text-style: bold;
         margin-bottom: 1;
     }
+
+    #inventory-layout {
+        width: 100%;
+        height: 1fr;
+    }
+
+    #inventory-items {
+        width: 1fr;
+        height: 1fr;
+        border: round #594875;
+        background: #19171f;
+        padding: 1;
+        margin-right: 1;
+    }
+
+    #inventory-details {
+        width: 2fr;
+        height: 1fr;
+        border: round #9b80d4;
+        background: #211b2f;
+        padding: 1 2;
+    }
+
+    .inventory-item {
+        width: 100%;
+        height: auto;
+        min-height: 3;
+        margin-bottom: 1;
+        content-align: left middle;
+    }
+
+    .inventory-item-selected {
+        border: round #c4a7ff;
+    }
+
+    #inventory-item-title {
+        color: #e6d8ff;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #inventory-item-description {
+        color: #d6d6e0;
+        height: 1fr;
+    }
+
+    .inventory-use {
+        width: 100%;
+        margin-top: 1;
+    }
     """
 
     def __init__(self):
@@ -855,6 +906,15 @@ class AshenKingdom(App):
             reward_text = QUEST_UI["reward_format"].format(
                 xp=quest["reward"].get("xp", 0)
             )
+            item_rewards = quest["reward"].get("items", [])
+            if item_rewards:
+                names = [
+                    f"{ITEMS[item['id']]['name']} ×{item.get('quantity', 1)}"
+                    for item in item_rewards
+                    if item.get("id") in ITEMS
+                ]
+                if names:
+                    reward_text += "\nItems: " + ", ".join(names)
             await content.mount(
                 Static(
                     f"{quest['title']}\n{quest['description']}\n\n"
@@ -1293,19 +1353,99 @@ class AshenKingdom(App):
                     await content.mount(Static(label, classes=classes))
         await self.mount_interaction_buttons(Button("Back", id="back"))
 
-    async def show_inventory(self):
-
+    async def show_inventory(self, selected_item_id=None):
         screen = await self.clear_screen()
+        items = self.session.inventory.items
+        selected_item = next(
+            (
+                item
+                for item in items
+                if item.metadata.get("content_id") == selected_item_id
+            ),
+            items[0] if items else None,
+        )
+        selected_id = (
+            selected_item.metadata.get("content_id") if selected_item else None
+        )
 
         await screen.mount(
             Static("INVENTORY", classes="title"),
             Static(
-                f"Items: {self.session.inventory.count_items()}\n"
-                f"Available slots: {self.session.inventory.get_available_slots()}\n"
-                f"Total slots: {self.session.inventory.max_slots}",
-                classes="info",
+                f"{self.session.inventory.count_items()} items  ·  "
+                f"{self.session.inventory.get_available_slots()} / "
+                f"{self.session.inventory.max_slots} slots free",
+                classes="subtitle",
+            ),
+            *(
+                [
+                    Static(
+                        f"Pending quest rewards: {len(self.session.pending_item_rewards)} "
+                        "item stack(s) will be added when space is available.",
+                        classes="skill-message",
+                    )
+                ]
+                if self.session.pending_item_rewards
+                else []
+            ),
+            Horizontal(
+                VerticalScroll(id="inventory-items"),
+                Vertical(id="inventory-details"),
+                id="inventory-layout",
             ),
         )
+        item_list = screen.query_one("#inventory-items", VerticalScroll)
+        details = screen.query_one("#inventory-details", Vertical)
+        if not items:
+            await item_list.mount(Static("Your inventory is empty.", classes="info"))
+            await details.mount(
+                Static("No item selected", id="inventory-item-title"),
+                Static(
+                    "Items you collect will appear here.",
+                    id="inventory-item-description",
+                ),
+            )
+        else:
+            if selected_item is None:
+                selected_item = items[0]
+            for item in items:
+                content_id = item.metadata.get("content_id")
+                is_selected = content_id == selected_id
+                label = f"{item.name}  x{item.quantity}"
+                await item_list.mount(
+                    Button(
+                        label,
+                        id=f"inventory-item-{content_id}",
+                        classes=(
+                            "inventory-item inventory-item-selected"
+                            if is_selected
+                            else "inventory-item"
+                        ),
+                        variant="primary" if is_selected else "default",
+                    )
+                )
+            definition = (
+                ITEMS.get(selected_id, {}) if isinstance(selected_id, str) else {}
+            )
+            item_type = definition.get("item_type", "ITEM").replace("_", " ").title()
+            consumable = definition.get("consumable", False)
+            description = (
+                selected_item.description if selected_item is not None else None
+            )
+            await details.mount(
+                Static(selected_item.name.upper(), id="inventory-item-title"),
+                Static(
+                    f"{item_type}  ·  Quantity: {selected_item.quantity}\n\n"
+                    f"{description or 'No description available.'}",
+                    id="inventory-item-description",
+                ),
+                Button(
+                    "Use item",
+                    id=f"use-item-{selected_id}",
+                    classes="inventory-use",
+                    disabled=not consumable,
+                    variant="primary",
+                ),
+            )
         await self.mount_interaction_buttons(Button("Back", id="back"))
 
     async def show_map(self):
@@ -1483,7 +1623,9 @@ class AshenKingdom(App):
                         else {}
                     )
                     quest_id = choice.get("quest_id", dialogue.get("quest_id"))
-                    if not isinstance(quest_id, str) or not self.session.accept_quest(quest_id):
+                    if not isinstance(quest_id, str) or not self.session.accept_quest(
+                        quest_id
+                    ):
                         self.notify("This quest is no longer available.", title="Quest")
                 await self.show_dialogue(response=choice["reply"], ended=True)
 
@@ -1514,6 +1656,16 @@ class AshenKingdom(App):
         elif button_id == "inventory":
 
             await self.show_inventory()
+
+        elif button_id.startswith("inventory-item-"):
+            item_id = button_id.removeprefix("inventory-item-")
+            await self.show_inventory(item_id)
+
+        elif button_id.startswith("use-item-"):
+            item_id = button_id.removeprefix("use-item-")
+            _used, message = self.session.use_item(item_id)
+            await self.show_inventory(item_id)
+            self.notify(message, title="Inventory")
 
         elif button_id == "save":
 

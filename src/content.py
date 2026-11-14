@@ -19,7 +19,14 @@ DIALOGUES = {
         "quest_id": "elder_request",
         "quest_states": {
             "available": {
-                "lines": ["{name}, {class_name}, son of Edwin... Is good to see you again.", "The old roads have begun to whisper again", "Im worried that some heretics mages have been opening new hell holes...", "Both Camelot and Resee reported creatures...", "I was already in my way to the florest", "Would you help this old man investigate?"],
+                "lines": [
+                    "{name}, {class_name}, son of Edwin... Is good to see you again.",
+                    "The old roads have begun to whisper again",
+                    "Im worried that some heretics mages have been opening new hell holes...",
+                    "Both Camelot and Resee reported creatures...",
+                    "I was already in my way to the florest",
+                    "Would you help this old man investigate?",
+                ],
                 "choices": [
                     {
                         "text": "Yes!",
@@ -33,9 +40,7 @@ DIALOGUES = {
                 ],
             },
             "active": {
-                "lines": [
-                    "Have you talked to Camelot, {name}?"
-                ],
+                "lines": ["Have you talked to Camelot, {name}?"],
                 "choices": [
                     {
                         "text": "I'll keep moving.",
@@ -44,9 +49,7 @@ DIALOGUES = {
                 ],
             },
             "completed": {
-                "lines": [
-                    "Camelot sent word, {name}... Wonderful."
-                ],
+                "lines": ["Camelot sent word, {name}... Wonderful."],
                 "choices": [
                     {
                         "text": "The Bastion is prepared.",
@@ -77,7 +80,7 @@ DIALOGUES = {
                     "(you talk about the creatures)",
                     "I see, well, our night watch almost losed a leg, and is scared of suprises for this night... again",
                     "So, i have been needing to kill those creatures for the last 5 days so the night watch would make his job. And yes, i am really tired...",
-                    "Can you help me this night?"
+                    "Can you help me this night?",
                 ],
                 "choices": [
                     {
@@ -114,9 +117,7 @@ DIALOGUES = {
                 ],
             },
         },
-        "lines": [
-            "Hi little {class_name}!"
-        ],
+        "lines": ["Hi little {class_name}!"],
         "choices": [
             {
                 "text": "Hey!",
@@ -134,7 +135,7 @@ DIALOGUES = {
                 "lines": [
                     "(You saw a woman fighthing some creatures)",
                     "Hey! {class_name}, come here!",
-                    "Some creatures get my daugther. Take those while i search her!"
+                    "Some creatures get my daugther. Take those while i search her!",
                 ],
                 "choices": [
                     {
@@ -162,7 +163,7 @@ DIALOGUES = {
             "completed": {
                 "lines": [
                     "Thanks {class_name}! My daugther is safe again!",
-                    "Here a little reward to you!"
+                    "Here a little reward to you!",
                 ],
                 "choices": [
                     {
@@ -172,9 +173,7 @@ DIALOGUES = {
                 ],
             },
         },
-        "lines": [
-            "Hi little {class_name}!"
-        ],
+        "lines": ["Hi little {class_name}!"],
         "choices": [
             {
                 "text": "Hey!",
@@ -184,10 +183,6 @@ DIALOGUES = {
     },
 }
 
-# Quest goals use "visit", "defeat", or "task". Give an objective an "id" to
-# let later objectives depend on its completion with event "task" and task_id.
-# Completing a quest also emits a task event with the quest ID. Locations can
-# be a location key or "any". Progress and rewards are handled by GameSession.
 QUEST_UI = {
     "button": "Quests",
     "title": "ACTIVE QUESTS",
@@ -196,6 +191,176 @@ QUEST_UI = {
     "completed_title": "COMPLETED",
     "reward_format": "Reward: {xp} XP",
 }
+
+ITEMS = {
+    "minor_health_potion": {
+        "name": "Minor Health Potion",
+        "description": "A small vial that restores your vitality when used.",
+        "item_type": "CONSUMABLE",
+        "value": 15,
+        "weight": 0.2,
+        "stackable": True,
+        "max_stack": 10,
+        "consumable": True,
+        "effect": {
+            "hp": 30
+        },
+    },
+    "medium_health_potion": {
+        "name": "Medium Health Potion",
+        "description": "A medium vial that restores your vitality when used.",
+        "item_type": "CONSUMABLE",
+        "value": 25,
+        "weight": 0.7,
+        "stackable": True,
+        "max_stack": 5,
+        "consumable": True,
+        "effect": {
+            "hp": 80
+        },
+    },
+    "large_health_potion": {
+        "name": "Large Health Potion",
+        "description": "A large vial that restores your vitality when used.",
+        "item_type": "CONSUMABLE",
+        "value": 30,
+        "weight": 1,
+        "stackable": True,
+        "max_stack": 3,
+        "consumable": True,
+        "effect": {
+            "hp": 120
+        },
+    },
+    "green_cristal": {
+        "name": "Green Cristal",
+        "description": "A strange green cristal... you feel ancestor vital energy there",
+        "item_type": "CONSUMABLE",
+        "value": 999,
+        "weight": 0.1,
+        "stackable": False,
+        "consumable": True,
+        "effect": {
+            "hp": 999,
+            "mana": 100,
+            "bonus_damage": 5,
+        },
+    },
+
+    "minor_mana_potion": {
+        "name": "Minor Mana Potion",
+        "description": "A small vial that restores your mana when used.",
+        "item_type": "CONSUMABLE",
+        "value": 15,
+        "weight": 0.2,
+        "stackable": True,
+        "max_stack": 10,
+        "consumable": True,
+        "effect": {
+            "mana": 30
+        },
+    },
+    "medium_mana_potion": {
+        "name": "Medium Mana Potion",
+        "description": "A medium vial that restores your mana when used.",
+        "item_type": "CONSUMABLE",
+        "value": 25,
+        "weight": 0.7,
+        "stackable": True,
+        "max_stack": 5,
+        "consumable": True,
+        "effect": {
+            "mana": 80
+        },
+    },
+    "large_mana_potion": {
+        "name": "Large Mana Potion",
+        "description": "A large vial that restores your mana when used.",
+        "item_type": "CONSUMABLE",
+        "value": 30,
+        "weight": 1,
+        "stackable": True,
+        "max_stack": 3,
+        "consumable": True,
+        "effect": {
+            "mana": 120
+        },
+    },
+    "blue_cristal": {
+        "name": "Blue Cristal",
+        "description": "A strange blue cristal... there are engraved strange simbols: 'W.W.'",
+        "item_type": "CONSUMABLE",
+        "value": 999,
+        "weight": 0.1,
+        "stackable": False,
+        "consumable": True,
+        "effect": {
+            "hp": 100,
+            "mana": 999,
+            "bonus_damage": 20,
+        },
+    },
+
+    "yellow_cristal": {
+        "name": "Yellow Cristal",
+        "description": "A strange yellow cristal... you feel the ancestors experience there...",
+        "item_type": "CONSUMABLE",
+        "value": 999,
+        "weight": 0.1,
+        "stackable": False,
+        "consumable": True,
+        "effect": {
+            "xp": 999,
+            "hp": 100,
+            "mana": 100,
+            "intelligence": 10,
+        },
+    },
+
+    "red_cristal": {
+        "name": "Red Cristal",
+        "description": "A strange red cristal... you feel... power...",
+        "item_type": "CONSUMABLE",
+        "value": 999,
+        "weight": 0.1,
+        "stackable": False,
+        "consumable": True,
+        "effect": {
+            "skill_points": 1,
+            "xp": 100,
+            "hp": 100,
+            "mana": 100,
+            "bonus_damage": 2,
+        },
+    },
+
+    "chaos_cristal": {
+        "name": "Chaos Cristal",
+        "description": "A strange cristal, you can fell some chaos inside it...",
+        "item_type": "CONSUMABLE",
+        "value": 999,
+        "weight": 0.1,
+        "stackable": False,
+        "consumable": True,
+        "effect": {
+            "skill_points": 10,
+            "xp": 999,
+            "hp": 999,
+            "mana": 999,
+            "bonus_damage": 10,
+            "intelligence": 50,
+        },
+    },
+}
+
+STARTING_ITEMS = [
+    {"id": "minor_health_potion", "quantity": 2},
+    {"id": "minor_mana_potion", "quantity": 2},
+]
+STARTING_CRISTALS = ("green_cristal", "blue_cristal", "yellow_cristal", "red_cristal")
+
+# Quest cheat-sheet: "visit", "defeat", or "task".
+# PS: location can be id or "any"
 QUESTS = {
     "elder_request": {
         "title": "A Message for The Bastion",
@@ -209,7 +374,7 @@ QUESTS = {
                 "count": 1,
             },
         ],
-        "reward": {"xp": 205},
+        "reward": {"xp": 205, "items": [{"id": "medium_health_potion", "quantity": 1}]},
     },
     "bastion_watch": {
         "title": "The Night Watch",
@@ -223,7 +388,7 @@ QUESTS = {
                 "count": 5,
             },
         ],
-        "reward": {"xp": 175},
+        "reward": {"xp": 175, "items": [{"id": "minor_health_potion", "quantity": 2}]},
     },
     "the_florest_guardian": {
         "title": "The Florest Guardian",
@@ -237,7 +402,7 @@ QUESTS = {
                 "count": 5,
             },
         ],
-        "reward": {"xp": 175},
+        "reward": {"xp": 175, "items": [{"id": "minor_health_potion", "quantity": 1}]},
     },
 }
 
@@ -840,6 +1005,7 @@ MONSTERS = (
         "hp": 55,
         "damage": 10,
         "xp": 35,
+        "drops": [{"id": "minor_mana_potion", "chance": 0.35, "min": 1, "max": 2}],
     },
     {
         "id": "shadow_wolf",
@@ -848,6 +1014,7 @@ MONSTERS = (
         "hp": 75,
         "damage": 14,
         "xp": 50,
+        "drops": [{"id": "minor_mana_potion", "chance": 0.25, "min": 1, "max": 1}],
     },
     {
         "id": "corrupted_treant",

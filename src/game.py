@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from barebones_rpg import Game, GameConfig, Location, World
-from barebones_rpg.items import Inventory
+from barebones_rpg.items import Inventory, Item, ItemType
 
 from .content import (
     LOCATIONS,
+    ITEMS,
     MONSTERS,
     QUESTS,
     SKILL_TREES,
@@ -17,6 +18,8 @@ from .content import (
     SPECIALIZATIONS,
     SPELLS,
     STARTING_LOCATION,
+    STARTING_CRISTALS,
+    STARTING_ITEMS,
 )
 
 
@@ -36,6 +39,7 @@ class GameSession:
         self.quest_progress: dict[str, list[int]] = {}
         self.completed_quests: list[str] = []
         self.accepted_quests: list[str] = []
+        self.pending_item_rewards: list[dict[str, Any]] = []
         self.rng = rng
 
     def _build_world(self) -> World:
@@ -86,6 +90,8 @@ class GameSession:
             "quest_progress": self.quest_progress,
             "completed_quests": self.completed_quests,
             "accepted_quests": self.accepted_quests,
+            "inventory": self.inventory.to_dict(),
+            "pending_item_rewards": self.pending_item_rewards,
         }
         self.save_path.parent.mkdir(parents=True, exist_ok=True)
         self.save_path.write_text(
@@ -109,6 +115,21 @@ class GameSession:
 
         self.character = character
         self.enemy = data.get("enemy")
+        saved_inventory = data.get("inventory")
+        if isinstance(saved_inventory, dict):
+            self.inventory = Inventory.from_dict(saved_inventory)
+        else:
+            self.inventory = Inventory(max_slots=20)
+        saved_pending_rewards = data.get("pending_item_rewards", [])
+        self.pending_item_rewards = [
+            {"id": reward["id"], "quantity": reward.get("quantity", 1)}
+            for reward in saved_pending_rewards
+            if isinstance(reward, dict)
+            and isinstance(reward.get("id"), str)
+            and isinstance(reward.get("quantity", 1), int)
+            and reward.get("quantity", 1) > 0
+            and reward["id"] in ITEMS
+        ] if isinstance(saved_pending_rewards, list) else []
         saved_completed = data.get("completed_quests", [])
         if not isinstance(saved_completed, list):
             saved_completed = []
@@ -173,7 +194,108 @@ class GameSession:
         self.quest_progress = {}
         self.completed_quests = []
         self.accepted_quests = []
+        self.pending_item_rewards = []
+        self.inventory = Inventory(max_slots=20)
+        for item_reward in STARTING_ITEMS:
+            self.grant_item(item_reward["id"], item_reward.get("quantity", 1))
+        crystal_pool = STARTING_CRISTALS
+        if self.rng.random() < 0.01:
+            crystal_pool = ("green_cristal", "chaos_cristal")
+        self.grant_item(self.rng.choice(crystal_pool))
         return True
+
+    def grant_item(self, item_id: str, quantity: int = 1) -> bool:
+        definition = ITEMS.get(item_id)
+        if definition is None or not isinstance(quantity, int) or quantity < 1:
+            return False
+        item_type = ItemType[definition["item_type"]]
+        item = Item(
+            name=definition["name"],
+            description=definition.get("description", ""),
+            item_type=item_type,
+            value=definition.get("value", 0),
+            weight=definition.get("weight", 1.0),
+            stackable=definition.get("stackable", False),
+            max_stack=definition.get("max_stack", 1),
+            quantity=quantity,
+            consumable=definition.get("consumable", False),
+            metadata={"content_id": item_id, **definition.get("effect", {})},
+        )
+        return self.inventory.add_item(item)
+
+    def _grant_reward_items(self, rewards: list[dict[str, Any]]) -> list[str]:
+        failures = []
+        for reward in rewards:
+            item_id = reward.get("id")
+            quantity = reward.get("quantity", 1)
+            if not isinstance(item_id, str):
+                failures.append(str(item_id))
+                continue
+            if not self.grant_item(item_id, quantity):
+                failures.append(item_id)
+                self.pending_item_rewards.append({"id": item_id, "quantity": quantity})
+        return failures
+
+    def _deliver_pending_item_rewards(self) -> list[str]:
+        delivered = []
+        remaining = []
+        for reward in self.pending_item_rewards:
+            if self.grant_item(reward["id"], reward["quantity"]):
+                delivered.append(reward["id"])
+            else:
+                remaining.append(reward)
+        self.pending_item_rewards = remaining
+        return delivered
+
+    def use_item(self, item_id: str) -> tuple[bool, str]:
+        player = self.character
+        item = next(
+            (
+                candidate
+                for candidate in self.inventory.items
+                if candidate.metadata.get("content_id") == item_id
+            ),
+            None,
+        )
+        definition = ITEMS.get(item_id)
+        if player is None or item is None or definition is None:
+            return False, "You do not have that item."
+        if not definition.get("consumable", False):
+            return False, "That item cannot be used."
+
+        effects = definition.get("effect", {})
+        restored_hp = 0
+        restored_mana = 0
+        if "hp" in effects:
+            missing_hp = max(0, player["max_hp"] - player["hp"])
+            restored_hp = min(max(0, effects["hp"]), missing_hp)
+        if "mana" in effects:
+            missing_mana = max(0, player["max_mana"] - player["mana"])
+            restored_mana = min(max(0, effects["mana"]), missing_mana)
+        has_permanent_effect = any(
+            effects.get(key, 0) > 0
+            for key in ("xp", "skill_points", "intelligence", "bonus_damage")
+        )
+        if restored_hp <= 0 and restored_mana <= 0 and not has_permanent_effect:
+            if "hp" in effects and "mana" in effects:
+                return False, "Your health and mana are already full."
+            return False, "Your health or mana is already full."
+        player["hp"] += restored_hp
+        player["mana"] += restored_mana
+        if "xp" in effects:
+            self._award_xp(effects["xp"])
+        if "skill_points" in effects:
+            player["skill_points"] += effects["skill_points"]
+        if "intelligence" in effects:
+            player["intelligence"] += effects["intelligence"]
+        if "bonus_damage" in effects:
+            player["bonus_damage"] += effects["bonus_damage"]
+        self.inventory.remove_item(item)
+        delivered = self._deliver_pending_item_rewards()
+        result = f"Used {item.name}; restored {restored_hp} HP and {restored_mana} mana."
+        if delivered:
+            result += " Pending reward added: " + ", ".join(delivered) + "."
+        return True, result
 
     def learn_skill(self, skill_id: str) -> tuple[bool, str]:
         player = self.character
@@ -265,9 +387,7 @@ class GameSession:
 
                     progress[index] += 1
                     if progress[index] == objective["count"] and objective.get("id"):
-                        pending_events.append(
-                            ("task", event_location, objective["id"])
-                        )
+                        pending_events.append(("task", event_location, objective["id"]))
 
                 if all(
                     progress[i] >= objective["count"]
@@ -275,11 +395,12 @@ class GameSession:
                 ):
                     self.completed_quests.append(quest_id)
                     self.accepted_quests.remove(quest_id)
-                    newly_completed.append((quest_id, quest["reward"].get("xp", 0)))
+                    newly_completed.append((quest_id, quest["reward"]))
                     pending_events.append(("task", event_location, quest_id))
 
-        for _quest_id, xp in newly_completed:
-            self._award_xp(xp)
+        for _quest_id, reward in newly_completed:
+            self._award_xp(reward.get("xp", 0))
+            self._grant_reward_items(reward.get("items", []))
 
     def search(self) -> tuple[dict[str, Any] | None, str | None]:
         if self.character is None:
@@ -368,14 +489,26 @@ class GameSession:
 
     def _claim_victory(self) -> int:
         assert self.enemy is not None and self.character is not None
-        reward = self.enemy["xp"]
+        enemy = self.enemy
+        reward = enemy["xp"]
         player = self.character
         self.enemy = None
         self._award_xp(reward)
+        self._grant_enemy_drops(enemy)
         location = self.current_location
         location_key = self.location_keys_by_id.get(location.id) if location else None
         self._record_quest_event("defeat", location_key)
         return reward
+
+    def _grant_enemy_drops(self, enemy: dict[str, Any]) -> list[str]:
+        granted = []
+        for drop in enemy.get("drops", []):
+            if self.rng.random() > drop.get("chance", 1.0):
+                continue
+            quantity = self.rng.randint(drop.get("min", 1), drop.get("max", 1))
+            if self.grant_item(drop["id"], quantity):
+                granted.append(drop["id"])
+        return granted
 
     def _award_xp(self, amount: int) -> None:
         player = self.character
