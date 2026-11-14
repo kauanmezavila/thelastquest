@@ -11,6 +11,7 @@ from barebones_rpg.items import Inventory
 from .content import (
     LOCATIONS,
     MONSTERS,
+    QUESTS,
     SKILL_TREES,
     STARTING_SKILLS,
     SPECIALIZATIONS,
@@ -32,6 +33,9 @@ class GameSession:
         self.inventory = Inventory(max_slots=20)
         self.character: dict[str, Any] | None = None
         self.enemy: dict[str, Any] | None = None
+        self.quest_progress: dict[str, list[int]] = {}
+        self.completed_quests: list[str] = []
+        self.accepted_quests: list[str] = []
         self.rng = rng
 
     def _build_world(self) -> World:
@@ -79,6 +83,9 @@ class GameSession:
             "character": self.character,
             "location": location.name if location else None,
             "enemy": self.enemy,
+            "quest_progress": self.quest_progress,
+            "completed_quests": self.completed_quests,
+            "accepted_quests": self.accepted_quests,
         }
         self.save_path.parent.mkdir(parents=True, exist_ok=True)
         self.save_path.write_text(
@@ -102,6 +109,39 @@ class GameSession:
 
         self.character = character
         self.enemy = data.get("enemy")
+        saved_completed = data.get("completed_quests", [])
+        if not isinstance(saved_completed, list):
+            saved_completed = []
+        self.completed_quests = [qid for qid in saved_completed if qid in QUESTS]
+        saved_accepted = data.get("accepted_quests")
+        if not isinstance(saved_accepted, list):
+            # Migrate saves from the previous quest version, where every quest
+            # started active as soon as the character was created.
+            saved_accepted = (
+                list(data.get("quest_progress", {}).keys())
+                if isinstance(data.get("quest_progress"), dict)
+                else []
+            )
+        self.accepted_quests = [
+            qid
+            for qid in saved_accepted
+            if qid in QUESTS and qid not in self.completed_quests
+        ]
+        saved_progress = data.get("quest_progress", {})
+        if not isinstance(saved_progress, dict):
+            saved_progress = {}
+        self.quest_progress = {}
+        for quest_id, quest in QUESTS.items():
+            if quest_id not in self.accepted_quests:
+                continue
+            values = saved_progress.get(quest_id, [])
+            if not isinstance(values, list):
+                values = []
+            counts = [
+                max(0, int(value)) for value in values[: len(quest["objectives"])]
+            ]
+            counts.extend([0] * (len(quest["objectives"]) - len(counts)))
+            self.quest_progress[quest_id] = counts
         self.world.set_current_location(self.locations_by_name[location_name].id)
         return True
 
@@ -130,6 +170,9 @@ class GameSession:
             "intelligence": stats["intelligence"],
             "bonus_damage": stats["bonus_damage"],
         }
+        self.quest_progress = {}
+        self.completed_quests = []
+        self.accepted_quests = []
         return True
 
     def learn_skill(self, skill_id: str) -> tuple[bool, str]:
@@ -170,7 +213,73 @@ class GameSession:
         if destination_id is None:
             return False
         self.world.set_current_location(destination_id)
+        destination = self.current_location
+        location_key = (
+            self.location_keys_by_id.get(destination.id) if destination else None
+        )
+        self._record_quest_event("visit", location_key)
         return True
+
+    def quest_objective_progress(self, quest_id: str, objective_index: int) -> int:
+        return self.quest_progress.get(quest_id, [])[objective_index]
+
+    def quest_status(self, quest_id: str) -> str:
+        if quest_id in self.completed_quests:
+            return "completed"
+        if quest_id in self.accepted_quests:
+            return "active"
+        return "available"
+
+    def accept_quest(self, quest_id: str) -> bool:
+        if quest_id not in QUESTS or self.quest_status(quest_id) != "available":
+            return False
+        self.accepted_quests.append(quest_id)
+        self.quest_progress[quest_id] = [0] * len(QUESTS[quest_id]["objectives"])
+        return True
+
+    def _record_quest_event(self, event: str, location_key: str | None) -> None:
+        newly_completed = []
+        pending_events: list[tuple[str, str | None, str | None]] = [
+            (event, location_key, None)
+        ]
+        while pending_events:
+            event_name, event_location, task_id = pending_events.pop(0)
+            for quest_id, quest in QUESTS.items():
+                if (
+                    quest_id not in self.accepted_quests
+                    or quest_id in self.completed_quests
+                ):
+                    continue
+                progress = self.quest_progress.setdefault(
+                    quest_id, [0] * len(quest["objectives"])
+                )
+                for index, objective in enumerate(quest["objectives"]):
+                    if objective["event"] != event_name:
+                        continue
+                    if event_name == "task" and objective.get("task_id") != task_id:
+                        continue
+                    if objective.get("location", "any") not in ("any", event_location):
+                        continue
+                    if progress[index] >= objective["count"]:
+                        continue
+
+                    progress[index] += 1
+                    if progress[index] == objective["count"] and objective.get("id"):
+                        pending_events.append(
+                            ("task", event_location, objective["id"])
+                        )
+
+                if all(
+                    progress[i] >= objective["count"]
+                    for i, objective in enumerate(quest["objectives"])
+                ):
+                    self.completed_quests.append(quest_id)
+                    self.accepted_quests.remove(quest_id)
+                    newly_completed.append((quest_id, quest["reward"].get("xp", 0)))
+                    pending_events.append(("task", event_location, quest_id))
+
+        for _quest_id, xp in newly_completed:
+            self._award_xp(xp)
 
     def search(self) -> tuple[dict[str, Any] | None, str | None]:
         if self.character is None:
@@ -261,9 +370,18 @@ class GameSession:
         assert self.enemy is not None and self.character is not None
         reward = self.enemy["xp"]
         player = self.character
-        if player["level"] < player["max_level"]:
-            player["xp"] += reward
         self.enemy = None
+        self._award_xp(reward)
+        location = self.current_location
+        location_key = self.location_keys_by_id.get(location.id) if location else None
+        self._record_quest_event("defeat", location_key)
+        return reward
+
+    def _award_xp(self, amount: int) -> None:
+        player = self.character
+        if player is None or player["level"] >= player["max_level"]:
+            return
+        player["xp"] += amount
         while (
             player["xp"] >= player["xp_next"] and player["level"] < player["max_level"]
         ):
@@ -278,7 +396,6 @@ class GameSession:
             player["intelligence"] += 2
         if player["level"] >= player["max_level"]:
             player["xp"] = player["xp_next"] = 1
-        return reward
 
     def retreat(self) -> None:
         self.enemy = None

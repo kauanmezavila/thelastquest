@@ -1,5 +1,246 @@
 STARTING_LOCATION = "eldoria_village"
 
+
+DIALOGUE_UI = {
+    "interact_label": "Speak with someone",
+    "continue_label": "Continue",
+    "return_label": "Return",
+    "panel_title": "A CONVERSATION",
+    "accent": "#d6ad44",
+}
+
+# Placeholders cheat-sheet:
+# {name}, {level}, {hp}, {max_hp}, {mana}, {class_name}, {location_name}, {quest_status}, {quest_title}, {quest_progress}, {quest_reward_xp}
+DIALOGUES = {
+    "eldoria_village": {
+        "speaker": "Elder Maerwen",
+        "title": "Keeper of Eldoria",
+        "portrait": "(I remenber he since i was 12, what a kind and wise man!)",
+        "quest_id": "elder_request",
+        "quest_states": {
+            "available": {
+                "lines": ["{name}, {class_name}, son of Edwin... Is good to see you again.", "The old roads have begun to whisper again", "Im worried that some heretics mages have been opening new hell holes...", "Both Camelot and Resee reported creatures...", "I was already in my way to the florest", "Would you help this old man investigate?"],
+                "choices": [
+                    {
+                        "text": "Yes!",
+                        "reply": "Wonderful {name}! Go talk with Camelot in the Bastion! I will be waiting with rewards for you!",
+                        "action": "accept_quest",
+                    },
+                    {
+                        "text": "Well, i haved others plans for today...",
+                        "reply": "Hmph, no worries {name}, the wisest path is yours...",
+                    },
+                ],
+            },
+            "active": {
+                "lines": [
+                    "Have you talked to Camelot, {name}?"
+                ],
+                "choices": [
+                    {
+                        "text": "I'll keep moving.",
+                        "reply": "May the ancestors guide you, little {class_name}...",
+                    }
+                ],
+            },
+            "completed": {
+                "lines": [
+                    "Camelot sent word, {name}... Wonderful."
+                ],
+                "choices": [
+                    {
+                        "text": "The Bastion is prepared.",
+                        "reply": "Then there is still hope for Eldoria. Thank you, mage.",
+                    }
+                ],
+            },
+        },
+        "lines": [
+            "(You hear Elder Maerwen murmuring with itself)",
+        ],
+        "choices": [
+            {
+                "text": "Elder?",
+                "reply": "Oh! the light may be with you {name}!",
+            },
+        ],
+    },
+    "bastion": {
+        "speaker": "Captain Camelot",
+        "title": "Commander of The Bastion",
+        "portrait": "(The Bastion captain, some Eldorians says that he already killed a dragon!)",
+        "quest_id": "bastion_watch",
+        "quest_states": {
+            "available": {
+                "lines": [
+                    "A mage, good. Something has been testing the eastern wall after midnight this week.",
+                    "(you talk about the creatures)",
+                    "I see, well, our night watch almost losed a leg, and is scared of suprises for this night... again",
+                    "So, i have been needing to kill those creatures for the last 5 days so the night watch would make his job. And yes, i am really tired...",
+                    "Can you help me this night?"
+                ],
+                "choices": [
+                    {
+                        "text": "Yes, i can hadle it",
+                        "reply": "Great! I will be in my room",
+                        "action": "accept_quest",
+                    },
+                    {
+                        "text": "I am a little weak to make this...",
+                        "reply": "Oh... i see... well, be careful so...",
+                    },
+                ],
+            },
+            "active": {
+                "lines": [
+                    "The night watch is still waiting for you to clear the creatures nearby."
+                ],
+                "choices": [
+                    {
+                        "text": "I'll continue the hunt.",
+                        "reply": "Good. Keep your eyes on the eastern wall.",
+                    }
+                ],
+            },
+            "completed": {
+                "lines": [
+                    "The eastern wall is quiet again. The watch owes you a debt."
+                ],
+                "choices": [
+                    {
+                        "text": "Glad to help.",
+                        "reply": "Eldoria stands stronger with you beside us.",
+                    }
+                ],
+            },
+        },
+        "lines": [
+            "Hi little {class_name}!"
+        ],
+        "choices": [
+            {
+                "text": "Hey!",
+                "reply": "Be careful!",
+            },
+        ],
+    },
+    "gray_forest": {
+        "speaker": "Resee, the Florest Guard",
+        "title": "Guard of the Gray Forest",
+        "portrait": "(Some Eldorians says that she lives here before Eldoria ever exists)",
+        "quest_id": "the_florest_guardian",
+        "quest_states": {
+            "available": {
+                "lines": [
+                    "(You saw a woman fighthing some creatures)",
+                    "Hey! {class_name}, come here!",
+                    "Some creatures get my daugther. Take those while i search her!"
+                ],
+                "choices": [
+                    {
+                        "text": "O-ok!",
+                        "reply": "You look new around here; do not answer if the woods call your name!",
+                        "action": "accept_quest",
+                    },
+                    {
+                        "text": "'(Fake a faint)",
+                        "reply": "'Im scared' - (You think and fake a faint, the woman persecute some creatures).",
+                    },
+                ],
+            },
+            "active": {
+                "lines": [
+                    "WHAT YOU IS DOING HERE?? LOOK THE CREATURES BEHIND YOU! - (She shouts)"
+                ],
+                "choices": [
+                    {
+                        "text": "OH! SORRY!",
+                        "reply": "(She kills a creature while look to you)",
+                    }
+                ],
+            },
+            "completed": {
+                "lines": [
+                    "Thanks {class_name}! My daugther is safe again!",
+                    "Here a little reward to you!"
+                ],
+                "choices": [
+                    {
+                        "text": "You are welcome!",
+                        "reply": "The forest, owes you a debt.",
+                    }
+                ],
+            },
+        },
+        "lines": [
+            "Hi little {class_name}!"
+        ],
+        "choices": [
+            {
+                "text": "Hey!",
+                "reply": "Be careful!",
+            },
+        ],
+    },
+}
+
+# Quest goals use "visit", "defeat", or "task". Give an objective an "id" to
+# let later objectives depend on its completion with event "task" and task_id.
+# Completing a quest also emits a task event with the quest ID. Locations can
+# be a location key or "any". Progress and rewards are handled by GameSession.
+QUEST_UI = {
+    "button": "Quests",
+    "title": "ACTIVE QUESTS",
+    "empty": "No active quests yet. Speak with the locals to take on a quest.",
+    "local_title": "TASKS HERE",
+    "completed_title": "COMPLETED",
+    "reward_format": "Reward: {xp} XP",
+}
+QUESTS = {
+    "elder_request": {
+        "title": "A Message for The Bastion",
+        "origin": "eldoria_village",
+        "description": "The Elder asks you to carry Eldoria's warning beyond the village.",
+        "objectives": [
+            {
+                "text": "Go talk with Camelot in the Bastion",
+                "event": "talk",
+                "location": "bastion",
+                "count": 1,
+            },
+        ],
+        "reward": {"xp": 205},
+    },
+    "bastion_watch": {
+        "title": "The Night Watch",
+        "origin": "bastion",
+        "description": "Camelot is looking for signs of whatever is testing the fortress.",
+        "objectives": [
+            {
+                "text": "Defeat creatures near the Bastion",
+                "event": "defeat",
+                "location": "bastion",
+                "count": 5,
+            },
+        ],
+        "reward": {"xp": 175},
+    },
+    "the_florest_guardian": {
+        "title": "The Florest Guardian",
+        "origin": "bastion",
+        "description": "Hold the creatures while Resee saves her child!",
+        "objectives": [
+            {
+                "text": "Defeat creatures in the florest",
+                "event": "defeat",
+                "location": "gray_forest",
+                "count": 5,
+            },
+        ],
+        "reward": {"xp": 175},
+    },
+}
+
 LOCATIONS = {
     "eldoria_village": {
         "name": "Eldoria Village",
@@ -63,10 +304,10 @@ SPECIALIZATIONS = {
 }
 
 STARTING_SKILLS = {
-    "pyromancer": ["fireball", "meditation", "punch", "focus"],
-    "arcanist": ["frost", "meditation", "punch", "focus"],
-    "druid": ["nature_blessing", "meditation", "punch", "focus"],
-    "necromancer": ["bone_spear", "meditation", "punch", "focus"],
+    "pyromancer": ["fireball", "punch"],
+    "arcanist": ["frost", "focus"],
+    "druid": ["nature_blessing", "meditation", "focus"],
+    "necromancer": ["bone_spear", "punch", "focus"],
 }
 
 
@@ -81,7 +322,7 @@ SPELLS = {
     "meditation": {
         "name": "Meditation",
         "cost": 1,
-        "damage": 10,
+        "damage": 50,
         "type": "heal",
         "description": "Focus is the key",
     },
@@ -113,6 +354,13 @@ SPELLS = {
         "damage": 65,
         "type": "damage",
         "description": "A flying creature made of lava from a far away royal land. Old, Slow, pricey, but works!",
+    },
+    "firealign": {
+        "name": "Fire Alignment",
+        "cost": 1,
+        "damage": 900,
+        "type": "mana",
+        "description": "Recanalizes your mana into a fire variable",
     },
     "firetornado": {
         "name": "Fire Tornado",
@@ -157,6 +405,13 @@ SPELLS = {
         "type": "damage",
         "description": "Opens a tiny hole in reality to another. Please don't look inside.",
     },
+    "arcane_rune_engrave": {
+        "name": "Arcane Rune Engravement",
+        "cost": 5,
+        "damage": 400,
+        "type": "mana",
+        "description": "Engrave mana runes into your skin temporaly, it may canalize mana from other dimension",
+    },
     "time_fracture": {
         "name": "Time Fracture",
         "cost": 45,
@@ -200,6 +455,13 @@ SPELLS = {
         "type": "damage",
         "description": "'Get over here!'",
     },
+    "nature_force": {
+        "name": "Nature's Force",
+        "cost": 0,
+        "damage": 100,
+        "type": "mana",
+        "description": "Plants love you so much, they even gave to you their natural mana!",
+    },
     "storm_call": {
         "name": "Storm Call",
         "cost": 40,
@@ -242,6 +504,13 @@ SPELLS = {
         "damage": 65,
         "type": "damage",
         "description": "Summon the unpaid interns of the afterlife.",
+    },
+    "deaths_souls": {
+        "name": "Death's souls",
+        "cost": 10,
+        "damage": 700,
+        "type": "mana",
+        "description": "Recently died souls loves mana, make a Honeypot and steal theirs!",
     },
     "curse_of_eternity": {
         "name": "Curse of Eternity",
@@ -312,6 +581,13 @@ SKILL_TREES = {
             "spell_id": "lavahound",
             "requires": ["inferno"],
         },
+        "firealign": {
+            "name": "Fire Alignment",
+            "description": "Recanalizes your mana into a fire variable",
+            "level": 3,
+            "spell_id": "firealign",
+            "requires": ["lavahound"],
+        },
         "firetornado": {
             "name": "Fire Tornado",
             "description": "Combine fire and wind into a destructive vortex.",
@@ -377,6 +653,13 @@ SKILL_TREES = {
             "level": 3,
             "spell_id": "dimensional_heal",
             "requires": ["arcane_missile"],
+        },
+        "arcane_rune_engrave": {
+            "name": "Arcane Rune Engravement",
+            "description": "Engrave mana runes into your skin temporaly, it may canalize mana from other dimension",
+            "level": 3,
+            "spell_id": "arcane_rune_engrave",
+            "requires": ["focus", "meditation"],
         },
         "void_rift": {
             "name": "Void Rift",
@@ -444,6 +727,13 @@ SKILL_TREES = {
             "spell_id": "entanglement",
             "requires": ["thorn_vine"],
         },
+        "nature_force": {
+            "name": "Nature's Force",
+            "description": "Plants love you so much, they even gave to you their natural mana!",
+            "level": 3,
+            "spell_id": "nature_force",
+            "requires": ["focus", "entanglement", "nature_blessing"],
+        },
         "world_tree": {
             "name": "World Tree's Embrace",
             "description": "Access the ancient vitality of the World Tree.",
@@ -509,6 +799,13 @@ SKILL_TREES = {
             "level": 3,
             "spell_id": "lich_regeneration",
             "requires": ["soul_drain"],
+        },
+        "deaths_souls": {
+            "name": "deaths_souls",
+            "description": "Recently died souls loves mana, make a Honeypot and steal theirs!",
+            "level": 3,
+            "spell_id": "deaths_souls",
+            "requires": ["focus", "meditation", "soul_drain", "bone_spear"],
         },
         "spectral_army": {
             "name": "Spectral Army",

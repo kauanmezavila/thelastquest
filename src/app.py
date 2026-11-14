@@ -5,8 +5,21 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, Footer, Header, Input, ProgressBar, Select, Static
 
-from .content import SPECIALIZATIONS, SKILL_TREES, STARTING_LOCATION
+from .content import (
+    DIALOGUES,
+    DIALOGUE_UI,
+    QUESTS,
+    QUEST_UI,
+    SPECIALIZATIONS,
+    SKILL_TREES,
+    STARTING_LOCATION,
+)
 from .game import GameSession
+
+
+class _DialogueFormatContext(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
 
 
 class AshenKingdom(App):
@@ -35,7 +48,7 @@ class AshenKingdom(App):
 
     #actions Button {
         width: 1fr;
-        min-width: 10;
+        min-width: 8;
         margin: 0 1;
     }
 
@@ -254,6 +267,64 @@ class AshenKingdom(App):
         height: auto;
     }
 
+    .quest-local-tasks {
+        width: 100%;
+        height: auto;
+        min-height: 3;
+        border: round #3f5946;
+        background: #121a15;
+        color: #cbe4ce;
+        padding: 1;
+        margin-bottom: 1;
+    }
+
+    #quest-content {
+        height: 1fr;
+        width: 100%;
+        padding: 0 1;
+    }
+
+    .quest-section-title {
+        color: #d6ad44;
+        text-style: bold;
+        margin: 1 0;
+    }
+
+    .quest-card {
+        width: 100%;
+        height: auto;
+        border: round #594875;
+        background: #19171f;
+        color: #e6d8ff;
+        padding: 1 2;
+        margin-bottom: 1;
+    }
+
+    .quest-completed {
+        width: 100%;
+        height: auto;
+        border: round #3f5946;
+        background: #121a15;
+        color: #cbe4ce;
+        padding: 1;
+    }
+
+    #dialogue-panel {
+        width: 100%;
+        height: 1fr;
+        border: round #d6ad44;
+        background: #19171f;
+        padding: 1 2;
+        margin: 1 0;
+    }
+
+    #dialogue-heading { color: #d6ad44; text-style: bold; text-align: center; width: 100%; margin-bottom: 1; }
+    #dialogue-portrait { color: #d6ad44; text-style: bold; text-align: center; width: 100%; height: 3; content-align: center middle; }
+    #dialogue-speaker { color: #e6d8ff; text-style: bold; text-align: center; width: 100%; margin-bottom: 1; }
+    #dialogue-text { color: #eee9f5; padding: 1 2; border: round #594875; height: auto; min-height: 5; }
+    #interaction-actions.dialogue-actions { height: auto; max-height: 12; overflow-y: auto; layout: vertical; }
+    #interaction-actions.dialogue-actions Button { width: 100%; height: auto; min-height: 3; margin: 0 0 1 0; }
+
     Button {
         background: #292437;
         color: white;
@@ -442,6 +513,9 @@ class AshenKingdom(App):
         self.session = GameSession()
         self.battle_log = []
         self.battle_animating = False
+        self.dialogue_location = None
+        self.dialogue_line_index = 0
+        self.dialogue_choices = []
 
     @property
     def character(self):
@@ -462,6 +536,7 @@ class AshenKingdom(App):
 
         with Horizontal(id="actions"):
             yield Button("Explore", id="explore")
+            yield Button(QUEST_UI["button"], id="quests")
             yield Button("Map", id="map")
             yield Button("Character", id="character")
             yield Button("Inventory", id="inventory")
@@ -676,6 +751,14 @@ class AshenKingdom(App):
                 id="player-mana-bar",
                 classes="health-bar",
             ),
+            Static(QUEST_UI["local_title"], classes="location-section"),
+            Static(
+                self.local_quest_tasks(
+                    self.session.location_keys_by_id.get(location.id)
+                ),
+                id="local-quest-tasks",
+                classes="quest-local-tasks",
+            ),
             Static("AVAILABLE ROUTES", classes="location-section"),
             Static(
                 "\n".join(
@@ -709,6 +792,12 @@ class AshenKingdom(App):
             Button("Search for creatures", id="search")
         )
 
+        location_key = self.session.location_keys_by_id.get(location.id)
+        if location_key in DIALOGUES:
+            await self.mount_interaction_buttons(
+                Button(DIALOGUE_UI["interact_label"], id="dialogue-start")
+            )
+
         for direction, destination_id in location.connections.items():
 
             destination = self.session.world.get_location(destination_id)
@@ -723,9 +812,178 @@ class AshenKingdom(App):
                 )
             )
 
+    def local_quest_tasks(self, location_key: str | None) -> str:
+        tasks = []
+        for quest_id, quest in QUESTS.items():
+            if quest_id not in self.session.accepted_quests:
+                continue
+            progress = self.session.quest_progress.get(quest_id, [])
+            for index, objective in enumerate(quest["objectives"]):
+                if (
+                    objective["location"] not in ("any", location_key)
+                    and quest.get("origin") != location_key
+                ):
+                    continue
+                current = progress[index] if index < len(progress) else 0
+                count = objective["count"]
+                tasks.append(
+                    f"{'✓' if current >= count else '◇'} {objective['text']} "
+                    f"[{current}/{count}]  ·  +{quest['reward'].get('xp', 0)} XP"
+                )
+        return "\n".join(tasks) if tasks else "No active tasks in this region."
+
+    async def show_quests(self):
+        screen = await self.clear_screen()
+        await screen.mount(VerticalScroll(id="quest-content"))
+        content = screen.query_one("#quest-content", VerticalScroll)
+        await content.mount(
+            Static("THE LAST QUEST  ·  JOURNAL", classes="title"),
+            Static(QUEST_UI["title"], classes="quest-section-title"),
+        )
+
+        active_count = 0
+        for quest_id, quest in QUESTS.items():
+            if quest_id not in self.session.accepted_quests:
+                continue
+            active_count += 1
+            progress = self.session.quest_progress.get(quest_id, [])
+            details = [
+                f"{objective['text']}   {'✓' if (progress[i] if i < len(progress) else 0) >= objective['count'] else '◇'} "
+                f"{progress[i] if i < len(progress) else 0}/{objective['count']}"
+                for i, objective in enumerate(quest["objectives"])
+            ]
+            reward_text = QUEST_UI["reward_format"].format(
+                xp=quest["reward"].get("xp", 0)
+            )
+            await content.mount(
+                Static(
+                    f"{quest['title']}\n{quest['description']}\n\n"
+                    f"OBJECTIVES\n" + "\n".join(details) + f"\n\n{reward_text}",
+                    classes="quest-card",
+                )
+            )
+
+        if not active_count:
+            await content.mount(Static(QUEST_UI["empty"], classes="quest-card"))
+
+        completed = [QUESTS[qid]["title"] for qid in self.session.completed_quests]
+        if completed:
+            await content.mount(
+                Static(QUEST_UI["completed_title"], classes="quest-section-title"),
+                Static(
+                    "\n".join(f"✓ {title}" for title in completed),
+                    classes="quest-completed",
+                ),
+            )
+        await self.mount_interaction_buttons(Button("Back to the world", id="back"))
+
     async def travel(self, direction):
         if self.session.travel(direction):
             await self.show_location("You traveled to a new location.")
+
+    async def show_dialogue(self, *, response=None, ended=False):
+        location = self.session.current_location
+        if location is None:
+            return
+        location_key = self.session.location_keys_by_id.get(location.id)
+        if location_key is None:
+            await self.show_location()
+            return
+
+        dialogue = DIALOGUES.get(location_key)
+        if dialogue is None:
+            await self.show_location()
+            return
+
+        quest_id = dialogue.get("quest_id")
+        quest_status = (
+            self.session.quest_status(quest_id) if quest_id in QUESTS else None
+        )
+        scene = dialogue.get("quest_states", {}).get(quest_status, dialogue)
+        lines = scene.get("lines", dialogue.get("lines", []))
+        context = self.dialogue_context(quest_id, quest_status, location)
+        self.dialogue_choices = [
+            {
+                **choice,
+                "text": self.format_dialogue_text(choice.get("text", ""), context),
+                "reply": self.format_dialogue_text(choice.get("reply", ""), context),
+            }
+            for choice in scene.get("choices", dialogue.get("choices", []))
+        ]
+        lines = [self.format_dialogue_text(line, context) for line in lines]
+        speaker = self.format_dialogue_text(dialogue["speaker"], context)
+        title = self.format_dialogue_text(dialogue.get("title", ""), context)
+        if not lines:
+            await self.show_location()
+            return
+
+        screen = await self.clear_screen()
+        actions = self.query_one("#interaction-actions", Horizontal)
+        actions.add_class("dialogue-actions")
+        await screen.mount(VerticalScroll(id="dialogue-panel"))
+        panel = screen.query_one("#dialogue-panel", VerticalScroll)
+        await panel.mount(
+            Static(
+                Text(DIALOGUE_UI["panel_title"], style=DIALOGUE_UI["accent"]),
+                id="dialogue-heading",
+            ),
+            Static(
+                Text(dialogue.get("portrait", "✦"), style=DIALOGUE_UI["accent"]),
+                id="dialogue-portrait",
+            ),
+            Static(
+                f"{speaker}  ·  {title}",
+                id="dialogue-speaker",
+            ),
+            Static(
+                response or lines[min(self.dialogue_line_index, len(lines) - 1)],
+                id="dialogue-text",
+            ),
+        )
+
+        if response is not None or ended:
+            await self.mount_interaction_buttons(
+                Button(DIALOGUE_UI["return_label"], id="dialogue-close")
+            )
+        elif self.dialogue_line_index < len(lines) - 1:
+            await self.mount_interaction_buttons(
+                Button(DIALOGUE_UI["continue_label"], id="dialogue-continue")
+            )
+        else:
+            for index, choice in enumerate(self.dialogue_choices):
+                await self.mount_interaction_buttons(
+                    Button(choice["text"], id=f"dialogue-choice-{index}")
+                )
+
+    def dialogue_context(self, quest_id, quest_status, location) -> dict:
+        player = self.character or {}
+        context = dict(player)
+        player_class = player.get("class")
+        class_id = player_class if isinstance(player_class, str) else ""
+        specialization = SPECIALIZATIONS.get(class_id, {})
+        context.update(
+            player_name=player.get("name", "Wanderer"),
+            class_name=specialization.get("name", class_id or "Mage"),
+            class_id=class_id,
+            location_name=location.name,
+            location_key=self.session.location_keys_by_id.get(location.id, ""),
+            quest_status=quest_status or "",
+            quest_title=QUESTS.get(quest_id, {}).get("title", ""),
+            quest_reward_xp=QUESTS.get(quest_id, {}).get("reward", {}).get("xp", 0),
+        )
+        if quest_id in QUESTS and quest_id in self.session.quest_progress:
+            progress = self.session.quest_progress[quest_id]
+            context["quest_progress"] = ", ".join(
+                f"{progress[index]}/{objective['count']}"
+                for index, objective in enumerate(QUESTS[quest_id]["objectives"])
+            )
+        else:
+            context["quest_progress"] = "0/0"
+        return context
+
+    @staticmethod
+    def format_dialogue_text(value: str, context: dict) -> str:
+        return value.format_map(_DialogueFormatContext(context))
 
     async def search_location(self):
 
@@ -1201,9 +1459,45 @@ class AshenKingdom(App):
 
             await self.search_location()
 
+        elif button_id == "dialogue-start":
+            location = self.session.current_location
+            self.dialogue_location = (
+                self.session.location_keys_by_id.get(location.id) if location else None
+            )
+            self.session._record_quest_event("talk", self.dialogue_location)
+            self.dialogue_line_index = 0
+            await self.show_dialogue()
+
+        elif button_id == "dialogue-continue":
+            self.dialogue_line_index += 1
+            await self.show_dialogue()
+
+        elif button_id.startswith("dialogue-choice-"):
+            choice_index = int(button_id.rsplit("-", 1)[1])
+            if 0 <= choice_index < len(self.dialogue_choices):
+                choice = self.dialogue_choices[choice_index]
+                if choice.get("action") == "accept_quest":
+                    dialogue = (
+                        DIALOGUES.get(self.dialogue_location, {})
+                        if self.dialogue_location is not None
+                        else {}
+                    )
+                    quest_id = choice.get("quest_id", dialogue.get("quest_id"))
+                    if not isinstance(quest_id, str) or not self.session.accept_quest(quest_id):
+                        self.notify("This quest is no longer available.", title="Quest")
+                await self.show_dialogue(response=choice["reply"], ended=True)
+
+        elif button_id == "dialogue-close":
+            self.dialogue_location = None
+            await self.show_location()
+
         elif button_id == "map":
 
             await self.show_map()
+
+        elif button_id == "quests":
+
+            await self.show_quests()
 
         elif button_id == "character":
 
