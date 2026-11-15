@@ -202,9 +202,7 @@ ITEMS = {
         "stackable": True,
         "max_stack": 10,
         "consumable": True,
-        "effect": {
-            "hp": 30
-        },
+        "effect": {"hp": 30},
     },
     "medium_health_potion": {
         "name": "Medium Health Potion",
@@ -215,9 +213,7 @@ ITEMS = {
         "stackable": True,
         "max_stack": 5,
         "consumable": True,
-        "effect": {
-            "hp": 80
-        },
+        "effect": {"hp": 80},
     },
     "large_health_potion": {
         "name": "Large Health Potion",
@@ -228,9 +224,7 @@ ITEMS = {
         "stackable": True,
         "max_stack": 3,
         "consumable": True,
-        "effect": {
-            "hp": 120
-        },
+        "effect": {"hp": 120},
     },
     "green_cristal": {
         "name": "Green Cristal",
@@ -246,7 +240,6 @@ ITEMS = {
             "bonus_damage": 5,
         },
     },
-
     "minor_mana_potion": {
         "name": "Minor Mana Potion",
         "description": "A small vial that restores your mana when used.",
@@ -256,9 +249,7 @@ ITEMS = {
         "stackable": True,
         "max_stack": 10,
         "consumable": True,
-        "effect": {
-            "mana": 30
-        },
+        "effect": {"mana": 30},
     },
     "medium_mana_potion": {
         "name": "Medium Mana Potion",
@@ -269,9 +260,7 @@ ITEMS = {
         "stackable": True,
         "max_stack": 5,
         "consumable": True,
-        "effect": {
-            "mana": 80
-        },
+        "effect": {"mana": 80},
     },
     "large_mana_potion": {
         "name": "Large Mana Potion",
@@ -282,9 +271,7 @@ ITEMS = {
         "stackable": True,
         "max_stack": 3,
         "consumable": True,
-        "effect": {
-            "mana": 120
-        },
+        "effect": {"mana": 120},
     },
     "blue_cristal": {
         "name": "Blue Cristal",
@@ -300,7 +287,6 @@ ITEMS = {
             "bonus_damage": 20,
         },
     },
-
     "yellow_cristal": {
         "name": "Yellow Cristal",
         "description": "A strange yellow cristal... you feel the ancestors experience there...",
@@ -316,7 +302,6 @@ ITEMS = {
             "intelligence": 10,
         },
     },
-
     "red_cristal": {
         "name": "Red Cristal",
         "description": "A strange red cristal... you feel... power...",
@@ -333,7 +318,6 @@ ITEMS = {
             "bonus_damage": 2,
         },
     },
-
     "chaos_cristal": {
         "name": "Chaos Cristal",
         "description": "A strange cristal, you can fell some chaos inside it...",

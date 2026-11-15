@@ -1,5 +1,5 @@
-from src.app import AshenKingdom
+from src.app import TheLastQuest
 
 
 if __name__ == "__main__":
-    AshenKingdom().run()
+    TheLastQuest().run()

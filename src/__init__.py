@@ -1,5 +1,5 @@
 """The Last Quest game package."""
 
-from .app import AshenKingdom
+from .app import TheLastQuest
 
-__all__ = ["AshenKingdom"]
+__all__ = ["TheLastQuest"]

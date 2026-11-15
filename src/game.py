@@ -42,7 +42,7 @@ class GameSession:
         self.pending_item_rewards: list[dict[str, Any]] = []
         self.rng = rng
 
-    def _build_world(self) -> World:
+    def _build_world(self) -> Any:
         world = World(name="Eldoria")
         locations_by_id = {}
         for location_key, details in LOCATIONS.items():
@@ -121,15 +121,19 @@ class GameSession:
         else:
             self.inventory = Inventory(max_slots=20)
         saved_pending_rewards = data.get("pending_item_rewards", [])
-        self.pending_item_rewards = [
-            {"id": reward["id"], "quantity": reward.get("quantity", 1)}
-            for reward in saved_pending_rewards
-            if isinstance(reward, dict)
-            and isinstance(reward.get("id"), str)
-            and isinstance(reward.get("quantity", 1), int)
-            and reward.get("quantity", 1) > 0
-            and reward["id"] in ITEMS
-        ] if isinstance(saved_pending_rewards, list) else []
+        self.pending_item_rewards = (
+            [
+                {"id": reward["id"], "quantity": reward.get("quantity", 1)}
+                for reward in saved_pending_rewards
+                if isinstance(reward, dict)
+                and isinstance(reward.get("id"), str)
+                and isinstance(reward.get("quantity", 1), int)
+                and reward.get("quantity", 1) > 0
+                and reward["id"] in ITEMS
+            ]
+            if isinstance(saved_pending_rewards, list)
+            else []
+        )
         saved_completed = data.get("completed_quests", [])
         if not isinstance(saved_completed, list):
             saved_completed = []
@@ -167,7 +171,7 @@ class GameSession:
         return True
 
     @property
-    def current_location(self):
+    def current_location(self) -> Location | None:
         return self.world.get_current_location()
 
     def create_character(self, name: str, specialization: str) -> bool:
@@ -292,7 +296,9 @@ class GameSession:
             player["bonus_damage"] += effects["bonus_damage"]
         self.inventory.remove_item(item)
         delivered = self._deliver_pending_item_rewards()
-        result = f"Used {item.name}; restored {restored_hp} HP and {restored_mana} mana."
+        result = (
+            f"Used {item.name}; restored {restored_hp} HP and {restored_mana} mana."
+        )
         if delivered:
             result += " Pending reward added: " + ", ".join(delivered) + "."
         return True, result

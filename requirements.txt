@@ -1,0 +1,4 @@
+barebones_rpg>=0.2.0
+rich>=15.0.0
+textual>=8.2.8
+pygame>=2.6.1

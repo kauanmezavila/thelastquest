@@ -5,6 +5,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, Footer, Header, Input, ProgressBar, Select, Static
 
+from .audio import AudioManager
 from .content import (
     DIALOGUES,
     DIALOGUE_UI,
@@ -23,7 +24,7 @@ class _DialogueFormatContext(dict):
         return "{" + key + "}"
 
 
-class AshenKingdom(App):
+class TheLastQuest(App):
 
     TITLE = "The Last Quest"
     SUB_TITLE = "A Mage's Journey Through Eldoria"
@@ -45,6 +46,7 @@ class AshenKingdom(App):
         width: 100%;
         height: 4;
         layout: horizontal;
+        display: none;
     }
 
     #actions Button {
@@ -53,17 +55,43 @@ class AshenKingdom(App):
         margin: 0 1;
     }
 
+    #main-screen.start-screen {
+        align: center middle;
+    }
+
+    #start-menu {
+        width: 36;
+        max-width: 100%;
+        height: auto;
+        align: center middle;
+    }
+
+    #start-menu .title {
+        margin-bottom: 2;
+    }
+
+    #start-menu Button {
+        width: 100%;
+        height: 3;
+        margin: 1 0;
+    }
+
     #interaction-actions {
         dock: bottom;
         width: 100%;
-        height: 4;
+        height: auto;
+        min-height: 3;
+        max-height: 8;
         layout: horizontal;
         align: center middle;
+        overflow-y: auto;
     }
 
     #interaction-actions Button {
         width: 1fr;
         min-width: 10;
+        min-height: 3;
+        height: auto;
         margin: 0 1;
     }
 
@@ -561,12 +589,16 @@ class AshenKingdom(App):
     def __init__(self):
         super().__init__()
 
+        self.audio = AudioManager()
         self.session = GameSession()
         self.battle_log = []
         self.battle_animating = False
         self.dialogue_location = None
         self.dialogue_line_index = 0
         self.dialogue_choices = []
+
+    async def on_unmount(self):
+        self.audio.close()
 
     @property
     def character(self):
@@ -576,14 +608,21 @@ class AshenKingdom(App):
     def enemy(self):
         return self.session.enemy
 
+    def on_mount(self):
+        self.set_interval(1.0, self.audio.update_music)
+
     def compose(self) -> ComposeResult:
 
         yield Header()
 
-        with Vertical(id="main-screen"):
-            yield Static(
-                "THE LAST QUEST\n\n" "A new adventure awaits...", classes="title"
-            )
+        with Vertical(id="main-screen", classes="start-screen"):
+            with Vertical(id="start-menu"):
+                yield Static(
+                    "THE LAST QUEST\n\nA new adventure awaits...", classes="title"
+                )
+                yield Button("Start", id="start")
+                yield Button("Continue", id="continue")
+                yield Button("Exit", id="exit")
 
         with Horizontal(id="actions"):
             yield Button("Explore", id="explore")
@@ -592,21 +631,23 @@ class AshenKingdom(App):
             yield Button("Character", id="character")
             yield Button("Inventory", id="inventory")
             yield Button("Save", id="save")
-            yield Button("Exit", id="exit")
+            yield Button("Exit", id="exit-game")
 
         yield Footer()
 
-    async def on_mount(self):
+    async def continue_game(self):
         try:
             loaded = self.session.load_game()
         except (OSError, ValueError, TypeError) as error:
             self.notify(f"Save could not be loaded: {error}", title="Save error")
-            await self.show_character_creation()
             return
 
         if not loaded:
-            await self.show_character_creation()
-        elif self.enemy:
+            self.notify("No saved game was found.", title="Continue")
+            return
+
+        self.query_one("#actions", Horizontal).display = True
+        if self.enemy:
             self.battle_log = [f"Battle resumed: {self.enemy['name']} is still here."]
             await self.show_battle()
         else:
@@ -626,6 +667,7 @@ class AshenKingdom(App):
     async def clear_screen(self):
 
         screen = self.query_one("#main-screen", Vertical)
+        screen.remove_class("start-screen")
         await screen.remove_children()
         await screen.mount(Horizontal(id="interaction-actions"))
 
@@ -711,6 +753,8 @@ class AshenKingdom(App):
             )
             return
 
+        self.audio.play("character")
+        self.query_one("#actions", Horizontal).display = True
         await self.show_location()
 
     async def show_location(self, message=None):
@@ -939,6 +983,7 @@ class AshenKingdom(App):
 
     async def travel(self, direction):
         if self.session.travel(direction):
+            self.audio.play("travel")
             await self.show_location("You traveled to a new location.")
 
     async def show_dialogue(self, *, response=None, ended=False):
@@ -977,6 +1022,8 @@ class AshenKingdom(App):
             await self.show_location()
             return
 
+        if response is None and not ended:
+            self.audio.play("dialogue")
         screen = await self.clear_screen()
         actions = self.query_one("#interaction-actions", Horizontal)
         actions.add_class("dialogue-actions")
@@ -1054,8 +1101,11 @@ class AshenKingdom(App):
 
         enemy, message = self.session.search()
         if enemy is None:
+            self.audio.play("discovery")
             await self.show_location(message)
             return
+
+        self.audio.play("battle")
 
         self.battle_log = [
             f"A level {enemy['level']} {enemy['name']} appeared!",
@@ -1165,12 +1215,22 @@ class AshenKingdom(App):
         self.battle_animating = True
         try:
             message, finished, _reward = self.session.cast_spell_player(spell_id)
+            if finished and "Victory!" in message:
+                self.audio.play("victory")
+            elif spell_id in self.session.available_spells() and self.session.available_spells()[spell_id]["type"] == "heal":
+                self.audio.play("heal")
+            else:
+                self.audio.play("magic")
             await self.show_battle_event(message)
             if finished:
                 self.battle_log = []
                 return
 
             message, finished = self.session.enemy_attack()
+            if "retreated safely" in message:
+                self.audio.play("retreat")
+            else:
+                self.audio.play("hit")
             await self.show_battle_event(message)
             if finished:
                 self.battle_log = []
@@ -1587,7 +1647,17 @@ class AshenKingdom(App):
         if self.battle_animating:
             return
 
-        if button_id == "create-character":
+        if not button_id.startswith("spell-"):
+            self.audio.play("button")
+
+        if button_id == "start":
+            self.session = GameSession()
+            await self.show_character_creation()
+
+        elif button_id == "continue":
+            await self.continue_game()
+
+        elif button_id == "create-character":
 
             await self.create_character()
 
@@ -1613,6 +1683,7 @@ class AshenKingdom(App):
             await self.show_dialogue()
 
         elif button_id.startswith("dialogue-choice-"):
+            self.audio.play("dialogue")
             choice_index = int(button_id.rsplit("-", 1)[1])
             if 0 <= choice_index < len(self.dialogue_choices):
                 choice = self.dialogue_choices[choice_index]
@@ -1663,7 +1734,9 @@ class AshenKingdom(App):
 
         elif button_id.startswith("use-item-"):
             item_id = button_id.removeprefix("use-item-")
-            _used, message = self.session.use_item(item_id)
+            used, message = self.session.use_item(item_id)
+            if used:
+                self.audio.play("item")
             await self.show_inventory(item_id)
             self.notify(message, title="Inventory")
 
@@ -1720,6 +1793,6 @@ class AshenKingdom(App):
 
             await self.cast_spell(spell_id)
 
-        elif button_id == "exit":
+        elif button_id in {"exit", "exit-game"}:
 
             self.exit()
