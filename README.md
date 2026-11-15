@@ -87,3 +87,11 @@ I wasn't able to find somewhere to put it in the game :(
 ### Why don't have more missions?
 
 Because i don't finded a way to make more tasks in the same location.
+
+# Maintener
+
+Maintened by Kauan Mezavila (ByKurebo)
+
+# License
+
+This project uses [MIT License](https://mit-license.org/)
