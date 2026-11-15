@@ -24,13 +24,15 @@ DIALOGUES = {
                     "The old roads have begun to whisper again",
                     "Im worried that some heretics mages have been opening new hell holes...",
                     "Both Camelot and Resee reported creatures...",
-                    "I was already in my way to the florest",
-                    "Would you help this old man investigate?",
+                    "Im worried that those creatures must may doing some problems",
+                    "I was already in my way to the florest to help Resee...",
+                    "But if our two work on this problem, the fast we can resolve it",
+                    "Would you help this old man?",
                 ],
                 "choices": [
                     {
                         "text": "Yes!",
-                        "reply": "Wonderful {name}! Go talk with Camelot in the Bastion! I will be waiting with rewards for you!",
+                        "reply": "Wonderful {name}! Go talk with Camelot in the Bastion! He reported some creatures in the night.",
                         "action": "accept_quest",
                     },
                     {
@@ -40,7 +42,7 @@ DIALOGUES = {
                 ],
             },
             "active": {
-                "lines": ["Have you talked to Camelot, {name}?"],
+                "lines": ["What is you doing here {name}?", "Have you talked to Camelot, {name}?"],
                 "choices": [
                     {
                         "text": "I'll keep moving.",
@@ -52,7 +54,7 @@ DIALOGUES = {
                 "lines": ["Camelot sent word, {name}... Wonderful."],
                 "choices": [
                     {
-                        "text": "The Bastion is prepared.",
+                        "text": "It was really easy.",
                         "reply": "Then there is still hope for Eldoria. Thank you, mage.",
                     }
                 ],
@@ -480,7 +482,7 @@ SPELLS = {
         "cost": 0,
         "damage": 20,
         "type": "mana",
-        "description": "Remeber: mana is your body energy flow",
+        "description": "Remenber: mana is your body energy flow",
     },
     # PYROMANCER
     "fireball": {
@@ -520,8 +522,8 @@ SPELLS = {
     },
     "bakuhatsu": {
         "name": "爆裂魔法 - BAKUHATSU",
-        "cost": 120,
-        "damage": 180,
+        "cost": 300,
+        "damage": 9999,
         "type": "damage",
         "description": "EXPLOSION! A crimson-eyed wizard would be proud >:3",
     },
@@ -753,10 +755,10 @@ SKILL_TREES = {
         },
         "bakuhatsu": {
             "name": "BAKUHATSU",
-            "description": "ULTIMATE: Become the explosion. Everything else is optional.",
+            "description": "ULTIMATE: EXPLOSION! A crimson-eyed wizard would be proud >:3",
             "level": 6,
             "spell_id": "bakuhatsu",
-            "requires": ["firetornado", "lavahound"],
+            "requires": ["firetornado", "lavahound", "phoenix", "firealign"],
         },
     },
     # ARCANIST
